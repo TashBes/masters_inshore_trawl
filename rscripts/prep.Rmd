@@ -1,0 +1,56 @@
+---
+title: "pulling data out of access"
+author: "Natasha Besseling"
+date: "2023-04-26"
+output: html_document
+---
+
+Remeber to use 32 bit R.
+
+load libraries
+ 
+```{r}
+library(RODBC)
+library(here)
+```
+ 
+import tables from access
+
+```{r}
+
+con2 <- odbcConnectAccess2007(here("data/DemersalInshoreTrawl1990-2019 REQUESTS.accdb"))
+
+drag.catches <- sqlFetch(con2, "drag_catches")
+
+drags <- sqlFetch(con2, "drags")
+
+drags.no.effort <- sqlFetch(con2, "drags_no_effort")
+
+landings <- sqlFetch(con2, "landings")
+
+landings.catches <- sqlFetch(con2, "landings_catches")
+
+convert <- sqlFetch(con2, "REF_dbo_product_category_factors")
+
+odbcCloseAll()
+
+```
+
+
+save as csv's
+
+```{r}
+write.csv(drag.catches, file = here("data/drag.catches.csv"), row.names = F)
+write.csv(drags, file = here("data/drags.csv"), row.names = F)
+write.csv(drags.no.effort, file = here("data/drags.no.effort.csv"), row.names = F)
+write.csv(landings, file = here("data/landings.csv"), row.names = F)
+write.csv(landings.catches, file = here("data/landings.catches.csv"), row.names = F)
+write.csv(convert, file = here("data/convert.csv"), row.names = F)
+```
+
+
+
+
+
+
+

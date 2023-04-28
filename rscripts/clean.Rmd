@@ -1,0 +1,221 @@
+---
+title: "Clean data"
+author: "Natasha Besseling"
+date: "2023-04-28"
+output: html_document
+---
+
+load packages
+
+```{r}
+library(janitor)
+library(tidyverse)
+library(lubridate)
+```
+
+
+load data
+
+```{r}
+drag.catches <- read.csv(here("data/drag.catches.csv"))
+drags <- read.csv(here("data/drags.csv"))
+drags.no.effort <- read.csv(here("data/drags.no.effort.csv"))
+landings <- read.csv(here("data/landings.csv"))
+landings.catches <- read.csv(here("data/landings.catches.csv"))
+convert <- read.csv(here("data/convert.csv"))
+```
+
+
+
+Load functions
+
+```{r}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+## get decade from year
+floor_decade    = function(value){ return(value - value %% 10) }
+
+## Normalise data
+normalise <- function(dat, values, id, join) {
+  
+  test <- dat %>%
+    group_by({{id}}) %>%
+    summarise(total = sum({{values}}))
+  
+  test1 <-  dat %>%
+    left_join(test, by = {{join}})
+  
+  test2 <- test1 %>%
+    mutate(norm = {{values}} /total)%>%
+    select(-total)
+}
+```
+
+
+Filter out only field I need for this project
+
+```{r}
+drag.catches <- drag.catches %>% 
+  select(drag_ID, species_code, category_code, cleaned_mass, nominal_mass)
+
+drags <- drags %>% 
+  select(-c(country_code, company_number, permit_holder, permit_holder_user_id, product_list_code, true_course, magnetic_course, bottom_temperature, surface_temperature, wind_direction, wind_force, gear_type_code, rpm, pitch, catch_volume, catch_production, validated, validate_user_id))
+
+drags.no.effort <- drags.no.effort %>% 
+  select(land_id, drag_noeffort_ID, species_code, category_code, nominal_mass)
+
+landings <- landings %>% 
+  select(land_ID, vessel_number, docking_date_yy, docking_date_mm, docking_date_dd, docking_date_hh, docking_date_mi, sailing_date_yy, sailing_date_mm, sailing_date_dd, sailing_date_hh, sailing_date_hh, sailing_date_mi, bottom_trawl, midwater_trawl, freezer_landing, wetfish_landing, number_of_drags)
+
+landings.catches <- landings.catches %>% 
+  select(land_ID, species_code, category_code, landed_mass)
+  
+  
+```
+
+
+Filter data to only trawls in the inshore grids 
+Make sure to only keep trips where all trawls occur inside the inshore trawl grounds
+
+define inshore grids (is_grds)
+
+```{r}
+is_grds <- c('512',
+'513',
+'514',
+'515',
+'516',
+'517',
+'518',
+'519',
+'520',
+'521',
+'522',
+'523',
+'524',
+'525',
+'526',
+'527',
+'530',
+'531',
+'532',
+'533',
+'535',
+'536',
+'537',
+'538',
+'539',
+'540',
+'541',
+'550',
+'551',
+'622',
+'625',
+'628',
+'629',
+'632',
+'633',
+'636',
+'637',
+'640'
+)
+```
+
+
+filter records using these grids
+
+```{r}
+#only keep trawls outside inshore grids
+only_isgrds <- drags %>%
+  mutate(grid_code = as.character(grid_code)) %>% 
+  filter( !grid_code %in% is_grds)%>%
+  distinct(land_ID)
+
+#delete all trips that contain at least one of these trawls
+
+landings <- landings %>% 
+  anti_join(only_isgrds)
+
+#now only keep trawls from these trips
+
+drags <- drags %>% 
+  semi_join(landings, by = "land_ID")
+
+#now only keep the catch records from these trips and trawls
+
+landings.catches <- landings.catches %>%
+  semi_join(landings, by = "land_ID")
+
+drag.catches <- drag.catches %>% 
+  semi_join(drags, by = "drag_ID")
+
+drags.no.effort <- drags.no.effort %>% 
+  semi_join(landings, by = c("land_id" = "land_ID"))
+  
+
+```
+
+
+only keep trips that only trageted either hake or sole
+define target species (is_trgt)
+
+```{r}
+is_trgt <- c("HAKE", "ECSOlE", "SOLE"
+)
+```
+
+
+filter records using these targets
+
+```{r}
+#only keep trawls that don't target hake or sole
+only_istrgt <- drags %>%
+  filter(!target_species_code %in% is_trgt) %>%
+  distinct(land_ID)
+
+#delete all trips that contain at least one of these trawls
+
+landings <- landings %>% 
+  anti_join(only_istrgt)
+
+#now only keep trawls from these trips
+
+drags <- drags %>% 
+  semi_join(landings, by = "land_ID")
+
+#now only keep the catch records from these trips and trawls
+
+landings.catches <- landings.catches %>%
+  semi_join(landings, by = "land_ID")
+
+drag.catches <- drag.catches %>% 
+  semi_join(drags, by = "drag_ID")
+
+drags.no.effort <- drags.no.effort %>% 
+  semi_join(landings, by = c("land_id" = "land_ID"))
+
+
+```
+
+save data
+
+```{r}
+write.csv(drag.catches, file = here("outputs/drag.catches.1.csv"), row.names = F)
+write.csv(drags, file = here("outputs/drags.1.csv"), row.names = F)
+write.csv(drags.no.effort, file = here("outputs/drags.no.effort.1.csv"), row.names = F)
+write.csv(landings, file = here("outputs/landings.1.csv"), row.names = F)
+write.csv(landings.catches, file = here("outputs/landings.catches.1.csv"), row.names = F)
+write.csv(convert, file = here("outputs/convert.1.csv"), row.names = F)
+```
+
+
+
+
+
+
+
+
+

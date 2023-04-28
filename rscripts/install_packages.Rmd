@@ -1,0 +1,15 @@
+---
+title: "All packages to be installed"
+author: "Natasha Besseling"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r}
+install.packages("here")
+install.packages("tidyverse")
+install.packages("RODBC")
+install.packages("janitor")
+install.packages("lubridate")
+```
+

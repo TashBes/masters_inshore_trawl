@@ -1,0 +1,67 @@
+---
+title: "data exploration"
+author: "Natasha Besseling"
+date: "2023-05-28"
+output: html_document
+---
+
+
+load packages
+
+```{r}
+library(janitor)
+library(tidyverse)
+library(lubridate)
+library(here)
+library(maptools)
+library(maps)
+library(mapdata)
+library(sp)
+library(rworldmap)
+
+```
+
+
+test general trends
+
+```{r}
+
+test <- drags.1 %>%
+  group_by(drag_ID) %>%
+  summarise(count = n(),
+            mass = sum(nominal_mass))
+
+drags %>%
+  ggplot(aes(docking_date_yy))+
+  geom_histogram()
+
+
+drag.catches %>%
+  filter(species_code == "KOB") %>%
+  ggplot(aes(docking_date_yy, nominal_mass))+
+  geom_col()
+
+
+drags.no.effort %>%
+  filter(species_code == "KOB") %>%
+  ggplot(aes(docking_date_yy))+
+  geom_histogram()
+
+landings.catches %>%
+  filter(species_code == "KOB") %>%
+  ggplot(aes(docking_date_yy))+
+  geom_histogram()
+
+
+landings.catches %>%
+  filter(species_code == "KOB") %>%
+  ggplot(aes(docking_date_yy, landed_mass))+
+  geom_col()
+
+
+```
+
+
+
+
+

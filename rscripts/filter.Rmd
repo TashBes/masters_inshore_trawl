@@ -11,6 +11,7 @@ load packages
 library(janitor)
 library(tidyverse)
 library(lubridate)
+library(here)
 ```
 
 
@@ -23,6 +24,7 @@ drags.no.effort <- read.csv(here("data/drags.no.effort.csv"))
 landings <- read.csv(here("data/landings.csv"))
 landings.catches <- read.csv(here("data/landings.catches.csv"))
 convert <- read.csv(here("data/convert.csv"))
+
 ```
 
 
@@ -55,11 +57,11 @@ normalise <- function(dat, values, id, join) {
 ```
 
 
-Filter out only field I need for this project
+Filter out only fields I need for this project
 
 ```{r}
 drag.catches <- drag.catches %>% 
-  select(drag_ID, species_code, category_code, cleaned_mass, nominal_mass)
+  select(drag_ID, docking_date_yy, species_code, category_code, cleaned_mass, nominal_mass)
 
 drags <- drags %>% 
   select(-c(country_code, company_number, permit_holder, permit_holder_user_id, product_list_code, true_course, magnetic_course, bottom_temperature, surface_temperature, wind_direction, wind_force, gear_type_code, rpm, pitch, catch_volume, catch_production, validated, validate_user_id))

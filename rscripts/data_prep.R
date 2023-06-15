@@ -89,7 +89,7 @@ drag_catches <-  dbGetQuery(con, "SELECT * FROM dit_drag_catches_clean WHERE dra
            grid_code IN (SELECT grid_code FROM dit_drags_clean WHERE grid_code IN (512,513,514,515,516,517,518,519,520,521,522,523,524, 525,526,527,530,531,532,533,535,536,537,538,539,540,541,550,551,622,625,628,629,632,633,636,637,640)))")
 
 landings_catches <-  dbGetQuery(con, "SELECT * FROM dit_landings_catches_clean WHERE land_id IN 
-            (SELECT land_id FROM dit_dragsv WHERE vessel_number IN
+            (SELECT land_id FROM dit_drags_clean WHERE vessel_number IN
            (SELECT vessel_number FROM dit_drags_clean WHERE docking_date_yy = 2019) AND 
            grid_code IN (SELECT grid_code FROM dit_drags_clean WHERE grid_code IN (512,513,514,515,516,517,518,519,520,521,522,523,524, 525,526,527,530,531,532,533,535,536,537,538,539,540,541,550,551,622,625,628,629,632,633,636,637,640)))")
 

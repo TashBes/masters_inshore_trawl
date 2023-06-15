@@ -1,0 +1,245 @@
+---
+title: "Bycatch Paper"
+author: "Natasha Besseling"
+date: "2023-06-06"
+output: html_document
+---
+
+load packages
+```{r message=FALSE, warning=FALSE}
+library(janitor)
+library(fuzzySim)
+library(ggthemes)
+library(dendextend)
+library(vegan)
+library(tidyverse)
+library(lubridate)
+library(maptools)
+library(maps)
+library(mapdata)
+library(wesanderson)
+library(RColorBrewer)
+library(sp)
+library(gridExtra)
+library(ggsn)  # north2() scalebar()
+library(rworldmap) 
+library(ggrepel)
+library(plotrix)
+library(ggdendro)
+```
+
+
+calculate the bycatch composition by weight
+
+```{r}
+# total number of species
+
+test <- landings_catches %>%
+  distinct(species_code)
+
+#49
+
+##total catch composition
+
+test <- landings_catches%>%
+  group_by(species_code)%>%
+  summarise(mass = sum(nominal_mass, na.rm = T))%>%
+  mutate(proportion = mass/sum(mass))
+
+#hake = 57.4
+#sole = 4.2
+
+
+## Top species
+
+species <- landings_catches %>%
+  mutate(nominal_mass= nominal_mass/1000)%>%
+  group_by(species_code, docking_date_yy)%>%
+  summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
+  pivot_wider(names_from = docking_date_yy, values_from = nominal_mass)%>%
+  mutate_all(~replace_na(.,0))%>%
+  pivot_longer(cols = 2:31, names_to = "docking_date_yy", values_to = "nominal_mass")%>%
+  group_by(species_code)%>%
+  summarise(nominal_mass=sum(nominal_mass)/30)
+
+
+species <- species[order(-species$nominal_mass),]
+
+species <- species %>%
+  mutate(cumsum = round(cumsum(nominal_mass))) %>%
+  mutate(Percent_of_total = round(cumsum/sum(nominal_mass)*100, digits= 2))%>%
+  mutate(percentage_landings= round(nominal_mass/sum(nominal_mass)*100, digits= 2))%>%
+  mutate(nominal_mass= round(nominal_mass))
+
+
+topspp <- species %>%
+  filter(Percent_of_total <= 98)%>%
+  select(species_code)
+```
+
+
+Cluster analysis of vessels 
+
+```{r}
+#target species
+
+target_code <- drags %>%
+  count(vessel_number, target_species_code)%>%
+  normalise(n, vessel_number, "vessel_number")%>%
+  filter(!norm<0.5)%>%
+  mutate(target_code = if_else(norm>0.5 & 
+                                 target_species_code == "HAKE", 
+                               "M.capensis",
+                               if_else(norm>0.5 & 
+                                         target_species_code == "ECSOLE", 
+                                       "A.pectoralis", "both"), "both"))
+
+
+
+####
+#cluster
+####
+
+
+test <- landings_catches%>%
+  right_join(select(target_code, vessel_number, target_code))%>%
+  right_join(topspp)%>%
+  group_by(vessel_number,target_code, species_code)%>%
+  summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
+  normalise(nominal_mass, vessel_number, "vessel_number")%>%
+  mutate(norm = sqrt(norm))%>%
+  ungroup()%>%
+  select(vessel_number, norm, species_code)%>%
+  pivot_wider(names_from = species_code, values_from = norm)%>%
+  mutate_all(~replace_na(.,0))%>%
+  ungroup()
+%>%
+  column_to_rownames(var = "vessel_number")
+
+#write.csv(test, "simp.ves.csv", row.names = F)
+
+#distance matrix
+
+dm <- vegdist(test[2:14], method="bray", na.rm = T)
+
+#cluster
+
+
+cluster<- dm %>%
+  hclust(method = "average")
+
+
+x <- cluster%>%
+  as.dendrogram()%>% 
+  dendextend::set("labels_cex", 0.5)%>%
+  colour_branches(h = 0.25, groupLabels = T,
+                  col = wes_palette("FantasticFox1"))
+
+plot(x)
+title(ylab = 'Dissimilarity', line = 2.5)
+title(xlab = 'Vessels', line = 2)
+
+
+dend_list <- get_subdendrograms(x, 2)
+labels <- lapply(dend_list, labels)
+grp<- labels %>%
+  plyr::ldply( rbind)%>%
+  t()%>%
+  as_tibble()%>%
+  pivot_longer(cols= 1:2,names_to = "grp", values_drop_na = T )%>%
+  column_to_rownames(var = "value")
+
+
+cop <- cophenetic(cluster)
+cor(dm, cop)
+
+
+ves.s <- merge(test, grp, by = "row.names")
+#write.csv(ves.s, "simp.ves.csv", , row.names = F)
+
+#### MDS
+
+#distance matrix
+
+dm <- vegdist(ves.s[2:14], method="bray", na.rm = T)
+
+#Do MDS
+mds <- metaMDS(dm, 
+               k=3,
+               try=15, trymax=20,
+               autotransform = FALSE)         #if it doesn't converge increase k by 1. 
+
+
+MDS_xy <- data.frame(mds$points)
+
+
+ggplot(MDS_xy, aes(MDS1, MDS2, colour = ves.s$grp, shape = ves.s$target_code)) +
+  geom_point(size = 5) + 
+  theme(legend.title = element_text(size = 14, face = "bold"), 
+        legend.text = element_text(size = 12, face = "bold"), 
+        legend.position = "right", 
+        axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
+        axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
+        axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
+        axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
+        panel.background = element_blank(), 
+        panel.border = element_rect(fill = NA, colour = "black"), 
+        legend.key=element_blank()) + 
+  labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "group") +
+  scale_colour_brewer(palette = "Paired", aesthetics = "colour")
+
+
+#ggsave("chapter 3.3.jpeg")
+
+####
+#graphs
+####
+grp <- grp %>%
+  rownames_to_column(var = "vessel_number")
+
+spp <- topspp %>%
+  rownames_to_column(var = "id")%>%
+  mutate(id = as.numeric(id))
+
+landings_catches%>%
+  right_join(spp)%>%
+  right_join(grp)%>%
+  group_by(grp, id, species_code)%>%
+  summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
+  normalise(nominal_mass, grp, "grp")%>%
+  mutate(norm = sqrt(norm))%>%
+  ggplot(aes(reorder(species_code, id), norm, fill = grp))+
+  geom_col()+
+  facet_wrap(~grp)+
+  theme(legend.title = element_blank(), 
+        legend.position = "none",
+        axis.text.x = element_text(face = "bold",colour = "black", size = 8, 
+                                   angle = 90, vjust = 0.5, hjust=1), 
+        axis.text.y = element_text(face = "bold", size = 8, colour = "black"), 
+        axis.title.y = element_text( face = "bold", size = 12, colour = "black"),
+        axis.title.y.right = element_text( face = "bold", size = 12, colour = "blue"),
+        axis.title.x = element_text(face = "bold", size = 12, colour = "black"),
+        panel.background = element_blank(), 
+        panel.border = element_rect(fill = NA, colour = "black"), 
+        legend.key=element_blank()) +
+  labs(x = "Species code", y = "Proportion")+
+  scale_fill_brewer(palette = "Paired", aesthetics = "fill")
+
+
+ggsave("chapter 3.4.jpeg")
+
+
+```
+
+
+cluster analysis of each variable year, month, area, vessel
+
+
+
+
+
+
+
+
+
+

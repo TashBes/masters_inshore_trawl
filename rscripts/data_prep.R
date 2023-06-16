@@ -4,64 +4,11 @@
 #load libraries
 library(janitor)
 library(tidyverse)
-library(lubridate)
 library(here)
 library(DBI)
 library(RPostgres)
-library(vegan)
 
 #load functions
-
-## Normalise data
-normalise <- function(dat, values, id, join) {
-  
-  test <- dat %>%
-    group_by({{id}}) %>%
-    summarise(total = sum({{values}}))
-  
-  test1 <-  dat %>%
-    left_join(test, by = {{join}})
-  
-  test2 <- test1 %>%
-    mutate(norm = {{values}} /total)%>%
-    select(-total)
-}
-## pairwise tests for permanova
-pairwise.adonis <- function(x,factors, sim.function = 'vegdist', sim.method = 'bray', p.adjust.m ='bonferroni')
-{
-  library(vegan)
-  
-  co = combn(unique(as.character(factors)),2)
-  pairs = c()
-  F.Model =c()
-  R2 = c()
-  p.value = c()
-  
-  
-  for(elem in 1:ncol(co)){
-    if(sim.function == 'daisy'){
-      library(cluster); x1 = daisy(x[factors %in% c(co[1,elem],co[2,elem]),],metric=sim.method)
-    } else{x1 = vegdist(x[factors %in% c(co[1,elem],co[2,elem]),],method=sim.method)}
-    
-    ad = adonis(x1 ~ factors[factors %in% c(co[1,elem],co[2,elem])] );
-    pairs = c(pairs,paste(co[1,elem],'vs',co[2,elem]));
-    F.Model =c(F.Model,ad$aov.tab[1,4]);
-    R2 = c(R2,ad$aov.tab[1,5]);
-    p.value = c(p.value,ad$aov.tab[1,6])
-  }
-  p.adjusted = p.adjust(p.value,method=p.adjust.m)
-  sig = c(rep('',length(p.adjusted)))
-  sig[p.adjusted <= 0.05] <-'.'
-  sig[p.adjusted <= 0.01] <-'*'
-  sig[p.adjusted <= 0.001] <-'**'
-  sig[p.adjusted <= 0.0001] <-'***'
-  
-  pairw.res = data.frame(pairs,F.Model,R2,p.value,p.adjusted,sig)
-  print("Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1")
-  return(pairw.res)
-  
-} 
-
 
 #get data for all trips made by vessels operating in 2019, in the inshore trawl grounds
 
@@ -98,7 +45,7 @@ dbDisconnect(con)
 
 
 #fix species records
-
+#check the species codes
 drag_spp <- drag_catches %>% 
   distinct(species_code)
 land_spp <- landings_catches %>% 
@@ -106,22 +53,39 @@ land_spp <- landings_catches %>%
 spp <- drag_spp %>% 
   full_join(land_spp)
 
+#split all remaining shark records evenly between HNSH and SFSH
 
 drag_catches <- drag_catches%>%
-  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+#  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
   group_by(drag_id,
            vessel_number,
-           company_number,
            docking_date_yy, 
            species_code)%>%
   summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
   ungroup()%>%
   pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
   mutate_all(~replace_na(.,0))%>%
-  mutate(HNSH = (HNSH+SHRK)/2, HNSH)%>%
-  mutate(SFSH = (SFSH+SHRK)/2, SFSH)%>%
+  mutate(HNSH = HNSH+(SHRK/2))%>%
+  mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK)) %>% 
-  pivot_longer(cols = 5:47, 
+  pivot_longer(cols = 4:48, 
+               names_to = "species_code", 
+               values_to = "nominal_mass", 
+               values_drop_na = T) %>% 
+  mutate(nominal_mass = na_if(nominal_mass, 0)) %>% 
+  na.omit()
+
+landings_catches <- landings_catches%>%
+  #  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+  group_by(land_id,vessel_number, docking_date_yy, species_code)%>%
+  summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
+  ungroup()%>%
+  pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
+  mutate_all(~replace_na(.,0))%>%
+  mutate(HNSH = HNSH+(SHRK/2))%>%
+  mutate(SFSH = SFSH+(SHRK/2))%>%
+  select(-c(SHRK))%>%
+  pivot_longer(cols = 4:50, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
@@ -129,33 +93,29 @@ drag_catches <- drag_catches%>%
   na.omit()
 
 
-shark <- landings_catches%>%
-  filter(species_code %in% c("SFSH", "HNSH","SHRK"))%>%
-  count(vessel_number, species_code)%>%
-  count(vessel_number)%>%
-  mutate(shark = if_else(n == 2, "a", "b"))%>%
-  select(-n)
+#connect to the sql database
+con <- dbConnect(RPostgres::Postgres(),
+                 port = 5432,
+                 user = "postgres",
+                 password = "A.inodorus")
 
-landings_catches <- landings_catches%>%
-  filter(!(land_id == "RSA, 50, 262, 1/7/1992 0:0" & 
-             species_code == "SHRK"))%>%
-  filter(!species_code %in% "DEMF")%>%
-  left_join(shark)%>%
-  group_by(land_id,vessel_number,company_number, docking_date_yy, species_code, shark)%>%
-  summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
-  ungroup()%>%
-  pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
-  mutate_all(~replace_na(.,0))%>%
-  mutate(SFSH = if_else(shark == "a", SHRK+SFSH, SFSH))%>%
-  mutate(HNSH = if_else(shark != "a", HNSH+SHRK/2, HNSH))%>%
-  mutate(SFSH = if_else(shark != "a", SFSH+SHRK/2, SFSH))%>%
-  select(-c(SHRK, shark))%>%
-  pivot_longer(cols = 6:50, 
-               names_to = "species_code", 
-               values_to = "nominal_mass", 
-               values_drop_na = T) %>% 
-  mutate(na_if(nominal_mass, 0))
+dbSendQuery(con, "create database masters_paper")
+
+#close connection to the database
+dbDisconnect(con)
+
+#connect to the sql database
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = "masters_paper",
+                 port = 5432,
+                 user = "postgres",
+                 password = "A.inodorus")
+
+dbWriteTable(con, "drags",drags,overwrite = T )
+dbWriteTable(con, "landings",landings,overwrite = T )
+dbWriteTable(con, "drag_catches",drag_catches,overwrite = T )
+dbWriteTable(con, "landings_catches",landings_catches,overwrite = T )
 
 
-
-
+#close connection to the database
+dbDisconnect(con)

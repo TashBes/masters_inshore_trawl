@@ -3,6 +3,8 @@ title: "Bycatch Paper"
 author: "Natasha Besseling"
 date: "2023-06-06"
 output: html_document
+editor_options: 
+  chunk_output_type: inline
 ---
 
 load packages
@@ -28,10 +30,84 @@ library(plotrix)
 library(ggdendro)
 ```
 
+load functions
+```{r echo=FALSE}
+## Normalise data
+normalise <- function(dat, values, id, join) {
+  
+  test <- dat %>%
+    group_by({{id}}) %>%
+    summarise(total = sum({{values}}))
+  
+  test1 <-  dat %>%
+    left_join(test, by = {{join}})
+  
+  test2 <- test1 %>%
+    mutate(norm = {{values}} /total)%>%
+    select(-total)
+}
+## pairwise tests for permanova
+pairwise.adonis <- function(x,factors, sim.function = 'vegdist', sim.method = 'bray', p.adjust.m ='bonferroni')
+{
+  library(vegan)
+  
+  co = combn(unique(as.character(factors)),2)
+  pairs = c()
+  F.Model =c()
+  R2 = c()
+  p.value = c()
+  
+  
+  for(elem in 1:ncol(co)){
+    if(sim.function == 'daisy'){
+      library(cluster); x1 = daisy(x[factors %in% c(co[1,elem],co[2,elem]),],metric=sim.method)
+    } else{x1 = vegdist(x[factors %in% c(co[1,elem],co[2,elem]),],method=sim.method)}
+    
+    ad = adonis(x1 ~ factors[factors %in% c(co[1,elem],co[2,elem])] );
+    pairs = c(pairs,paste(co[1,elem],'vs',co[2,elem]));
+    F.Model =c(F.Model,ad$aov.tab[1,4]);
+    R2 = c(R2,ad$aov.tab[1,5]);
+    p.value = c(p.value,ad$aov.tab[1,6])
+  }
+  p.adjusted = p.adjust(p.value,method=p.adjust.m)
+  sig = c(rep('',length(p.adjusted)))
+  sig[p.adjusted <= 0.05] <-'.'
+  sig[p.adjusted <= 0.01] <-'*'
+  sig[p.adjusted <= 0.001] <-'**'
+  sig[p.adjusted <= 0.0001] <-'***'
+  
+  pairw.res = data.frame(pairs,F.Model,R2,p.value,p.adjusted,sig)
+  print("Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1")
+  return(pairw.res)
+  
+} 
+
+```
+
+
+load the data
+```{r}
+#connect to the sql database
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = "masters_paper",
+                 port = 5432,
+                 user = "postgres",
+                 password = "A.inodorus")
+
+drags <- dbReadTable(con, "drags" )
+landings <- dbReadTable(con, "landings" )
+drag_catches <- dbReadTable(con, "drag_catches")
+landings_catches <- dbReadTable(con, "landings_catches" )
+
+
+#close connection to the database
+dbDisconnect(con)
+```
+
 
 calculate the bycatch composition by weight
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 # total number of species
 
 test <- landings_catches %>%
@@ -80,19 +156,19 @@ topspp <- species %>%
 
 Cluster analysis of vessels 
 
-```{r}
-#target species
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 
+#determine if the vessel is a hake or sole directed vessel
 target_code <- drags %>%
   count(vessel_number, target_species_code)%>%
   normalise(n, vessel_number, "vessel_number")%>%
   filter(!norm<0.5)%>%
   mutate(target_code = if_else(norm>0.5 & 
                                  target_species_code == "HAKE", 
-                               "M.capensis",
+                               "Hake",
                                if_else(norm>0.5 & 
                                          target_species_code == "ECSOLE", 
-                                       "A.pectoralis", "both"), "both"))
+                                       "Sole", "both"), "both"))
 
 
 
@@ -100,11 +176,10 @@ target_code <- drags %>%
 #cluster
 ####
 
-
+#sum the catch by vessel, and normalise and square root the catch comp per vessel
 test <- landings_catches%>%
-  right_join(select(target_code, vessel_number, target_code))%>%
   right_join(topspp)%>%
-  group_by(vessel_number,target_code, species_code)%>%
+  group_by(vessel_number,species_code)%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
   normalise(nominal_mass, vessel_number, "vessel_number")%>%
   mutate(norm = sqrt(norm))%>%
@@ -112,34 +187,36 @@ test <- landings_catches%>%
   select(vessel_number, norm, species_code)%>%
   pivot_wider(names_from = species_code, values_from = norm)%>%
   mutate_all(~replace_na(.,0))%>%
-  ungroup()
-%>%
+  ungroup()%>% 
   column_to_rownames(var = "vessel_number")
 
 #write.csv(test, "simp.ves.csv", row.names = F)
 
 #distance matrix
-
-dm <- vegdist(test[2:14], method="bray", na.rm = T)
+dm <- vegdist(test, method="bray", na.rm = T)
 
 #cluster
-
-
 cluster<- dm %>%
   hclust(method = "average")
 
-
+#plot the cluster analysis in a dendrogram (try get the numbers the right way)
 x <- cluster%>%
   as.dendrogram()%>% 
-  dendextend::set("labels_cex", 0.5)%>%
+  dendextend::set("labels_cex", 0.8)%>%
+  dendextend::set("branches_lwd", 2)%>%
   colour_branches(h = 0.25, groupLabels = T,
-                  col = wes_palette("FantasticFox1"))
+                  col = brewer.pal(2,"Paired"))
 
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
 title(xlab = 'Vessels', line = 2)
 
+```
 
+Run an MDS
+
+```{r}
+#get the cluster groups into the catch comp dataframe
 dend_list <- get_subdendrograms(x, 2)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
@@ -149,19 +226,20 @@ grp<- labels %>%
   pivot_longer(cols= 1:2,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
+ves.s <- test %>% 
+  rownames_to_column(var = "value")
+  left_join(grp) %>% 
+  left_join(select(target_code, vessel_number, target_code), by = ("row.names" = "vessel_number"))
 
-cop <- cophenetic(cluster)
-cor(dm, cop)
+  merge(test, grp, by = "row.names")
 
-
-ves.s <- merge(test, grp, by = "row.names")
 #write.csv(ves.s, "simp.ves.csv", , row.names = F)
 
 #### MDS
 
 #distance matrix
 
-dm <- vegdist(ves.s[2:14], method="bray", na.rm = T)
+dm <- vegdist(ves.s[2:15], method="bray", na.rm = T)
 
 #Do MDS
 mds <- metaMDS(dm, 
@@ -185,15 +263,15 @@ ggplot(MDS_xy, aes(MDS1, MDS2, colour = ves.s$grp, shape = ves.s$target_code)) +
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black"), 
         legend.key=element_blank()) + 
-  labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "group") +
+  labs(x = "MDS 1", y = "MDS 2", colour = "Cluster", shape = "Target Species") +
   scale_colour_brewer(palette = "Paired", aesthetics = "colour")
 
 
-#ggsave("chapter 3.3.jpeg")
+```
+Make a bar graph per cluster
 
-####
-#graphs
-####
+```{r}
+#bar graph
 grp <- grp %>%
   rownames_to_column(var = "vessel_number")
 
@@ -201,13 +279,18 @@ spp <- topspp %>%
   rownames_to_column(var = "id")%>%
   mutate(id = as.numeric(id))
 
-landings_catches%>%
+test <- landings_catches%>%
+  mutate(vessel_number = as.character(vessel_number)) %>% 
   right_join(spp)%>%
-  right_join(grp)%>%
-  group_by(grp, id, species_code)%>%
-  summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
+  left_join(grp)
+%>%
+  group_by(grp, id, species_code)
+%>%
+  summarise(nominal_mass = sum(nominal_mass, na.rm = T))
+%>%
   normalise(nominal_mass, grp, "grp")%>%
-  mutate(norm = sqrt(norm))%>%
+  mutate(norm = sqrt(norm))
+%>%
   ggplot(aes(reorder(species_code, id), norm, fill = grp))+
   geom_col()+
   facet_wrap(~grp)+

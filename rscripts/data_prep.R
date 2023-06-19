@@ -60,7 +60,8 @@ drag_catches <- drag_catches%>%
   group_by(drag_id,
            vessel_number,
            docking_date_yy, 
-           species_code)%>%
+           species_code, 
+           scientific_name)%>%
   summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
   ungroup()%>%
   pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
@@ -68,7 +69,7 @@ drag_catches <- drag_catches%>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK)) %>% 
-  pivot_longer(cols = 4:48, 
+  pivot_longer(cols = 5:49, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
@@ -77,7 +78,11 @@ drag_catches <- drag_catches%>%
 
 landings_catches <- landings_catches%>%
   #  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
-  group_by(land_id,vessel_number, docking_date_yy, species_code)%>%
+  group_by(land_id,
+           vessel_number, 
+           docking_date_yy, 
+           species_code, 
+           scientific_name)%>%
   summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
   ungroup()%>%
   pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
@@ -85,7 +90,7 @@ landings_catches <- landings_catches%>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK))%>%
-  pivot_longer(cols = 4:50, 
+  pivot_longer(cols = 5:51, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
@@ -94,15 +99,15 @@ landings_catches <- landings_catches%>%
 
 
 #connect to the sql database
-con <- dbConnect(RPostgres::Postgres(),
-                 port = 5432,
-                 user = "postgres",
-                 password = "A.inodorus")
+#con <- dbConnect(RPostgres::Postgres(),
+ #                port = 5432,
+  #               user = "postgres",
+   #              password = "A.inodorus")
 
-dbSendQuery(con, "create database masters_paper")
+#dbSendQuery(con, "create database masters_paper")
 
 #close connection to the database
-dbDisconnect(con)
+#dbDisconnect(con)
 
 #connect to the sql database
 con <- dbConnect(RPostgres::Postgres(),

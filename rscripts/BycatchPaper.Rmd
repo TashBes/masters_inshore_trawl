@@ -835,15 +835,8 @@ test <- landings_catches%>%
   right_join(topspp)%>%
   normalise(nominal_mass, land_id, "land_id")%>%
   mutate(norm = sqrt(norm))%>%
-  select(-c(nominal_mass, scientific_name))
-
-test.1 <- landings_catches %>%
-  dplyr::group_by(land_id, vessel_number, species_code, scientific_name) %>%
-  dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
-  dplyr::filter(n > 1L)
-
-  pivot_wider(names_from = species_code, values_from = norm)
-%>%
+  select(-c(nominal_mass, scientific_name))%>% 
+  pivot_wider(names_from = species_code, values_from = norm)%>%
   mutate(season = as.character(season))%>%
   mutate_all(~replace_na(.,0))
 
@@ -855,12 +848,12 @@ test.1 <- test %>%
 
 #distance matrix
 
-dm <- vegdist(test.1[5:17], method="bray", na.rm = T)
+dm <- vegdist(test.1[6:19], method="bray", na.rm = T)
 
 
 #Do a PERMANOVA
 
-permanova <- adonis(dm~ docking_date_yy*season*vessel_number, data = test.1[1:4])
+permanova <- adonis2(dm~ docking_date_yy*season*vessel_number, data = test.1[3:5])
 permanova
 
 
@@ -890,9 +883,101 @@ plot(vessel, hull=FALSE, ellipse=TRUE)
 plot(season, hull=FALSE, ellipse=TRUE)
 
 
-
 ```
 
+```{r}
+## area permanova - trawl data
+
+###make data
+
+drag.effort <- drags.1%>%
+  mutate(trawl_length_hh = if_else(!between(trawl_length_hh, 0.5, 9),
+                                   3.5, trawl_length_hh))%>%
+  group_by(drag_ID)%>%
+  summarise(trawl_length_hh = sum(trawl_length_hh, na.rm = T))
+
+area <- drag.catches.a %>%
+  filter(vessel_number %in% c('96', '93', '191', '244', "225"))%>%
+  filter(grid_code %in% c('512', '525','524', '514', '513', '523', '526', '554', '540', '555'))%>%
+  filter(docking_date_yy %in% c('2004', '2006'))
+
+
+
+
+## PERMANOVA
+
+test <- area%>%
+  filter(nominal_mass != 0)%>%
+  right_join(topspp)%>%
+  normalise(nominal_mass, drag_ID, "drag_ID")%>%
+  mutate(norm = sqrt(norm))%>%
+  mutate(season = as.character(season))%>%
+  select(-c(nominal_mass, company_number))%>%
+  pivot_wider(names_from = species_code, values_from = norm)%>%
+  mutate_all(~replace_na(.,0))
+
+spp <- test %>%
+  select(-c(docking_date_yy, season, vessel_number, grid_code))
+
+env <- test %>%
+  select(c(drag_ID,docking_date_yy, season, vessel_number, grid_code))
+
+
+write.csv(spp, "area.cluster.spp.csv", row.names = F)
+write.csv(env, "area.cluster.env.csv", row.names = F)
+
+
+#random sample
+test.1 <- test %>%
+  slice_sample(prop = 0.25)
+
+spp <- test.1 %>%
+  select(-c(docking_date_yy, season, vessel_number, grid_code))
+
+env <- test.1 %>%
+  select(c(drag_ID,docking_date_yy, season, vessel_number, grid_code))
+
+
+write.csv(spp, "area.cluster.spp.csv", row.names = F)
+write.csv(env, "area.cluster.env.csv", row.names = F)
+
+#distance matrix
+
+dm <- vegdist(test.1[6:18], method="bray", na.rm = T)
+
+
+#Do a PERMANOVA
+
+adonis(dm~ docking_date_yy*season*grid_code*vessel_number, data = test.1[1:5])
+
+
+
+# do dispersion test to see if centroids or dispersions differ 
+year <- betadisper(dm, test.1$docking_date_yy, type = "centroid")
+
+vessel <- betadisper(dm, test.1$vessel_number, type = "centroid")
+
+grid <- betadisper(dm, test.1$grid_code, type = "centroid")
+
+
+# do anova of dispersions
+anova.year<- anova(year)
+anova.year
+
+anova.ves <-  anova(vessel)
+anova.ves
+
+anova.grid <- anova(grid)
+anova.grid
+
+# plot the dispersions
+
+plot(year, hull=FALSE, ellipse=TRUE)
+plot(vessel, hull=FALSE, ellipse=TRUE)
+plot(grid, hull=FALSE, ellipse=TRUE)
+
+
+```
 
 
 

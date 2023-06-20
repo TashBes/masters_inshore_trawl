@@ -55,13 +55,12 @@ spp <- drag_spp %>%
 
 #split all remaining shark records evenly between HNSH and SFSH
 
-drag_catches <- drag_catches%>%
+drag_catches.1 <- drag_catches%>%
 #  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
   group_by(drag_id,
            vessel_number,
            docking_date_yy, 
-           species_code, 
-           scientific_name)%>%
+           species_code)%>%
   summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
   ungroup()%>%
   pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
@@ -69,20 +68,29 @@ drag_catches <- drag_catches%>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK)) %>% 
-  pivot_longer(cols = 5:49, 
+  pivot_longer(cols = 4:48, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
   mutate(nominal_mass = na_if(nominal_mass, 0)) %>% 
   na.omit()
 
-landings_catches <- landings_catches%>%
+test <- drag_catches%>%
+  distinct(species_code, scientific_name)
+
+drag_catches.2 <- drag_catches.1%>%
+  left_join(test)
+
+
+count(distinct(landings_catches, land_id))
+#8542
+
+landings_catches.1 <- landings_catches%>%
   #  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
   group_by(land_id,
            vessel_number, 
            docking_date_yy, 
-           species_code, 
-           scientific_name)%>%
+           species_code)%>%
   summarise(nominal_mass= sum(nominal_mass, na.rm = T))%>%
   ungroup()%>%
   pivot_wider(names_from = species_code, values_from = nominal_mass)%>%
@@ -90,12 +98,19 @@ landings_catches <- landings_catches%>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK))%>%
-  pivot_longer(cols = 5:51, 
+  pivot_longer(cols = 4:50, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
   mutate(nominal_mass = na_if(nominal_mass, 0)) %>% 
-  na.omit()
+  na.omit() 
+
+test <- landings_catches%>%
+  distinct(species_code, scientific_name)
+
+landings_catches.2 <- landings_catches.1%>%
+  left_join(test)
+  
 
 
 #connect to the sql database
@@ -118,8 +133,8 @@ con <- dbConnect(RPostgres::Postgres(),
 
 dbWriteTable(con, "drags",drags,overwrite = T )
 dbWriteTable(con, "landings",landings,overwrite = T )
-dbWriteTable(con, "drag_catches",drag_catches,overwrite = T )
-dbWriteTable(con, "landings_catches",landings_catches,overwrite = T )
+dbWriteTable(con, "drag_catches",drag_catches.2,overwrite = T )
+dbWriteTable(con, "landings_catches",landings_catches.2,overwrite = T )
 
 
 #close connection to the database

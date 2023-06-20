@@ -2,13 +2,16 @@
 title: "Bycatch Paper"
 author: "Natasha Besseling"
 date: "2023-06-06"
-output: html_document
-editor_options: 
+output:
+  word_document: default
+  html_document: default
+editor_options:
   chunk_output_type: inline
 ---
 
-load packages
+
 ```{r message=FALSE, warning=FALSE, include=FALSE}
+#load packages
 library(janitor)
 library(fuzzySim)
 library(ggthemes)
@@ -34,8 +37,9 @@ library(here)
 library(gt)
 ```
 
-load functions
+
 ```{r message=FALSE, warning=FALSE, include=FALSE}
+#load functions
 ## Normalise data
 normalise <- function(dat, values, id, join) {
   
@@ -89,8 +93,9 @@ pairwise.adonis <- function(x,factors, sim.function = 'vegdist', sim.method = 'b
 ```
 
 
-load the data
+
 ```{r include=FALSE}
+#load the data
 #connect to the sql database
 con <- dbConnect(RPostgres::Postgres(),
                  dbname = "masters_paper",
@@ -109,9 +114,10 @@ dbDisconnect(con)
 ```
 
 
-calculate the bycatch composition by weight
+
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
+#calculate the bycatch composition by weight
 # total number of species
 
 test <- landings_catches %>%
@@ -232,7 +238,7 @@ title(xlab = 'Vessels', line = 2)
 ```
 
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 #get the cluster groups into the catch comp dataframe
 dend_list <- get_subdendrograms(x, 2)
 labels <- lapply(dend_list, labels)
@@ -285,7 +291,7 @@ ggplot(MDS_xy, aes(MDS1, MDS2, colour = ves.s$grp, shape = ves.s$target_code)) +
 
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 #bar graph
 grp1 <- grp %>%
   rownames_to_column(var = "vessel_number")
@@ -325,7 +331,7 @@ landings_catches%>%
 
 cluster analysis of year
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 ####
 #cluster
 ####
@@ -365,7 +371,7 @@ title(xlab = 'Years', line = 2)
 
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 dend_list <- get_subdendrograms(x, 2)
 labels <- lapply(dend_list, labels)
@@ -421,7 +427,7 @@ ggplot(MDS_xy, aes(MDS1, MDS2, colour = test$grp)) +
 
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 ####
 #graphs
@@ -462,7 +468,7 @@ landings_catches%>%
 
 
 Cluster analysis of months
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 ####
 #cluster
 ####
@@ -512,7 +518,7 @@ title(ylab = 'Dissimilarity', line = 2.5)
 
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 dend_list <- get_subdendrograms(x, 3)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
@@ -813,6 +819,79 @@ test%>%
 
 ```
 
+Bycatch composition models
+```{r}
+#permanova model 1
+## PERMANOVA model 1 - year, season, vessel - trip data
+
+test <- landings_catches%>%
+  separate(land_id, c(NA,NA,NA,"docking_date"), sep = ",", remove = F )%>%
+  mutate(docking_date = as.Date(docking_date)) %>%               
+#  mutate(month = months(docking_date)) %>% 
+  mutate(season = quarter(docking_date)) %>% 
+  mutate(season = if_else(season == 1, "Summer", 
+                          if_else(season == 2, "Autumn", 
+                                  if_else(season == 3, "Winter", "Spring")))) %>% 
+  right_join(topspp)%>%
+  normalise(nominal_mass, land_id, "land_id")%>%
+  mutate(norm = sqrt(norm))%>%
+  select(-c(nominal_mass, scientific_name))
+
+test.1 <- landings_catches %>%
+  dplyr::group_by(land_id, vessel_number, species_code, scientific_name) %>%
+  dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
+  dplyr::filter(n > 1L)
+
+  pivot_wider(names_from = species_code, values_from = norm)
+%>%
+  mutate(season = as.character(season))%>%
+  mutate_all(~replace_na(.,0))
+
+
+
+#random sample
+test.1 <- test %>%
+  slice_sample(prop = 0.35)
+
+#distance matrix
+
+dm <- vegdist(test.1[5:17], method="bray", na.rm = T)
+
+
+#Do a PERMANOVA
+
+permanova <- adonis(dm~ docking_date_yy*season*vessel_number, data = test.1[1:4])
+permanova
+
+
+
+# do dispersion test to see if centroids or dispersions differ 
+year <- betadisper(dm, test.1$docking_date_yy, type = "centroid")
+
+vessel <- betadisper(dm, test.1$vessel_number, type = "centroid")
+
+season <- betadisper(dm, test.1$season, type = "centroid")
+
+
+# do anova of dispersions
+anova.year<- anova(year)
+anova.year
+
+anova.ves <-  anova(vessel)
+anova.ves
+
+anova.sea <- anova(season)
+anova.sea
+
+# plot the dispersions
+
+plot(year, hull=FALSE, ellipse=TRUE)
+plot(vessel, hull=FALSE, ellipse=TRUE)
+plot(season, hull=FALSE, ellipse=TRUE)
+
+
+
+```
 
 
 

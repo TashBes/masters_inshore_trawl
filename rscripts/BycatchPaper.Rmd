@@ -123,7 +123,7 @@ dbDisconnect(con)
 test <- landings_catches %>%
   distinct(species_code)
 
-#49
+#41
 
 ##total catch composition
 
@@ -132,8 +132,8 @@ test <- landings_catches%>%
   summarise(mass = sum(nominal_mass, na.rm = T))%>%
   mutate(proportion = mass/sum(mass))
 
-#hake = 57.4
-#sole = 4.2
+#hake = 50.1
+#sole = 4.1
 
 
 ## Top species
@@ -144,9 +144,9 @@ species <- landings_catches %>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
   pivot_wider(names_from = docking_date_yy, values_from = nominal_mass)%>%
   mutate_all(~replace_na(.,0))%>%
-  pivot_longer(cols = 3:32, names_to = "docking_date_yy", values_to = "nominal_mass")%>%
+  pivot_longer(cols = 3:12, names_to = "docking_date_yy", values_to = "nominal_mass")%>%
   group_by(species_code, scientific_name)%>%
-  summarise(nominal_mass=sum(nominal_mass)/30)
+  summarise(nominal_mass=sum(nominal_mass)/10)
 
 
 species <- species[order(-species$nominal_mass),]
@@ -214,7 +214,7 @@ test <- landings_catches%>%
   ungroup()%>% 
   column_to_rownames(var = "vessel_number")
 
-#write.csv(test, "simp.ves.csv", row.names = F)
+write.csv(test, "simp.ves.csv", row.names = F)
 
 #distance matrix
 dm <- vegdist(test, method="bray", na.rm = T)
@@ -228,8 +228,8 @@ x <- cluster%>%
   as.dendrogram()%>% 
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.25, groupLabels = T,
-                  col = brewer.pal(2,"Paired"))
+  colour_branches(h = 0.20, groupLabels = T,
+                  col = brewer.pal(4,"Paired"))
 
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
@@ -240,13 +240,13 @@ title(xlab = 'Vessels', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 #get the cluster groups into the catch comp dataframe
-dend_list <- get_subdendrograms(x, 2)
+dend_list <- get_subdendrograms(x, 4)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
   plyr::ldply( rbind)%>%
   t()%>%
   as_tibble()%>%
-  pivot_longer(cols= 1:2,names_to = "grp", values_drop_na = T )%>%
+  pivot_longer(cols= 1:4,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
 ves.s <- test %>% 
@@ -267,10 +267,11 @@ dm <- vegdist(ves.s[2:15], method="bray", na.rm = T)
 mds <- metaMDS(dm, 
                k=3,
                try=15, trymax=20,
-               autotransform = FALSE)         #if it doesn't converge increase k by 1. 
+               autotransform = FALSE,#if it doesn't converge increase k by 1. 
+               trace = F)
 
 
-MDS_xy <- data.frame(mds$points)
+MDS_xy <- data.frame(mds$points, mds$stress)
 
 
 ggplot(MDS_xy, aes(MDS1, MDS2, colour = ves.s$grp, shape = ves.s$target_code)) +
@@ -363,8 +364,8 @@ x <- cluster%>%
   as.dendrogram(xlab = "Years", ylab = "Dissimilarity")%>% 
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.15, groupLabels = T,
-                  col = brewer.pal(3, "Dark2"))
+  colour_branches(h = 0.1, groupLabels = T,
+                  col = brewer.pal(4, "Paired"))
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
 title(xlab = 'Years', line = 2)
@@ -373,15 +374,17 @@ title(xlab = 'Years', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-dend_list <- get_subdendrograms(x, 2)
+dend_list <- get_subdendrograms(x, 4)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
   plyr::ldply( rbind)%>%
   t()%>%
   as_tibble()%>%
   rename(Y1 = V1,
-         Y2 = V2)%>%
-  pivot_longer(cols= 1:2,names_to = "grp", values_drop_na = T )%>%
+         Y4 = V2,
+         Y3 = V3,
+         Y2 = V4)%>%
+  pivot_longer(cols= 1:4,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
 
@@ -399,7 +402,8 @@ dm <- vegdist(year.s[2:15], method="bray", na.rm = T)
 mds <- metaMDS(dm, 
                k=3,
                try=15, trymax=20,
-               autotransform = FALSE)         #if it doesn't converge increase k by 1. 
+               autotransform = FALSE,#if it doesn't converge increase k by 1. 
+               trace = F)         
 
 
 MDS_xy <- data.frame(mds$points)
@@ -547,7 +551,8 @@ dm <- vegdist(sea.s[2:15], method="bray", na.rm = T)
 mds <- metaMDS(dm, 
                k=3,
                try=15, trymax=20,
-               autotransform = FALSE)         #if it doesn't converge increase k by 1. 
+               autotransform = FALSE,#if it doesn't converge increase k by 1. 
+               trace = F)         
 
 
 MDS_xy <- data.frame(mds$points)
@@ -619,13 +624,14 @@ RSA <- c("South Africa")
 # Call the vector in `borders()`
 world_saf <- world[world@data$ADMIN %in% RSA, ]
 
-grid_code_south <- read.csv(here("data/grid_code_south.csv"))
+comm_grids <- read.csv(here("data/ComGrids.csv")) %>% 
+  filter(inshore_area ==1)
 
-grids.south <- grid_code_south%>%
-  mutate(mid_lat = (lat_N+lat_S)/2)%>%
-  mutate(mid_long = (long_W+long_E)/2)%>%
-  select(grid, mid_lat, mid_long)%>%
-  mutate(grid_code = as.character(grid), .keep = "unused")
+grid_mid <- comm_grids%>%
+  mutate(mid_lat = (maximum_latitude+minimum_latitude)/2)%>%
+  mutate(mid_long = (maximum_longitude+minimum_longitude)/2)%>%
+  select(code, mid_lat, mid_long)%>%
+  mutate(grid_code = as.character(code), .keep = "unused")
 
 
 #spp composition of area
@@ -641,7 +647,7 @@ count <- drags %>%
 
 grid <- drag_catches%>%
   left_join(select(drags,drag_id, depth, grid_code))%>%
-  left_join(count)%>%
+  right_join(count)%>%
   right_join(topspp)%>%
   group_by(grid_code, species_code)%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
@@ -669,7 +675,7 @@ x <- cluster%>%
   as.dendrogram()%>% 
   dendextend::set("labels_cex", 0.7)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.15, groupLabels = TRUE,
+  colour_branches(h = 0.25, groupLabels = TRUE,
                   col = brewer.pal(6,"Paired"))
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)

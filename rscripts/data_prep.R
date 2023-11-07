@@ -8,9 +8,7 @@ library(here)
 library(DBI)
 library(RPostgres)
 
-#load functions
-
-#get data for all trips made by vessels operating in 2019, in the inshore trawl grounds
+##get data
 
 #connect to the sql database
 con <- dbConnect(RPostgres::Postgres(),
@@ -20,43 +18,66 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = "A.inodorus")
 
 
-drags <- dbGetQuery(con, "SELECT * FROM dit_drags_clean WHERE vessel_number IN
-           (SELECT vessel_number FROM dit_drags_clean WHERE docking_date_yy = 2019) AND 
-           grid_code IN (SELECT grid_code FROM dit_drags_clean WHERE grid_code IN (512,513,514,515,516,517,518,519,520,521,522,523,524, 525,526,527,530,531,532,533,535,536,537,538,539,540,541,550,551,622,625,628,629,632,633,636,637,640))")
+drags <- dbGetQuery(con, "SELECT * FROM dit_drags_clean")
 
+landings <-  dbGetQuery(con, "SELECT * FROM dit_landings_clean")
 
-landings <-  dbGetQuery(con, "SELECT * FROM dit_landings_clean WHERE land_id IN 
-            (SELECT land_id FROM dit_drags_clean WHERE vessel_number IN
-           (SELECT vessel_number FROM dit_drags_clean WHERE docking_date_yy = 2019) AND 
-           grid_code IN (SELECT grid_code FROM dit_drags_clean WHERE grid_code IN (512,513,514,515,516,517,518,519,520,521,522,523,524, 525,526,527,530,531,532,533,535,536,537,538,539,540,541,550,551,622,625,628,629,632,633,636,637,640)))")
+drag_catches <-  dbGetQuery(con, "SELECT * FROM dit_drag_catches_clean")
 
-drag_catches <-  dbGetQuery(con, "SELECT * FROM dit_drag_catches_clean WHERE drag_id IN 
-            (SELECT drag_id FROM dit_drags_clean WHERE vessel_number IN
-           (SELECT vessel_number FROM dit_drags_clean WHERE docking_date_yy = 2019) AND 
-           grid_code IN (SELECT grid_code FROM dit_drags_clean WHERE grid_code IN (512,513,514,515,516,517,518,519,520,521,522,523,524, 525,526,527,530,531,532,533,535,536,537,538,539,540,541,550,551,622,625,628,629,632,633,636,637,640)))")
-
-landings_catches <-  dbGetQuery(con, "SELECT * FROM dit_landings_catches_clean WHERE land_id IN 
-            (SELECT land_id FROM dit_drags_clean WHERE vessel_number IN
-           (SELECT vessel_number FROM dit_drags_clean WHERE docking_date_yy = 2019) AND 
-           grid_code IN (SELECT grid_code FROM dit_drags_clean WHERE grid_code IN (512,513,514,515,516,517,518,519,520,521,522,523,524, 525,526,527,530,531,532,533,535,536,537,538,539,540,541,550,551,622,625,628,629,632,633,636,637,640)))")
+landings_catches <-  dbGetQuery(con, "SELECT * FROM dit_landings_catches_clean")
 
 #close connection to the database
 dbDisconnect(con)
 
+grid <- read.csv("data/ComGrids.csv")
 
-#fix species records
-#check the species codes
-drag_spp <- drag_catches %>% 
-  distinct(species_code)
-land_spp <- landings_catches %>% 
-  distinct(species_code)
-spp <- drag_spp %>% 
-  full_join(land_spp)
+### filter records
+###--------------------------------------------------------------------------
 
-#split all remaining shark records evenly between HNSH and SFSH
+##remove species codes that are not species
+##only take years fater 2000
+##only take vessel that fished in more than 50% years
+##only take gridcells in the inshore trawl grounds
 
+vessels <- landings %>% 
+  filter(docking_date_yy>2000) %>% 
+  distinct(docking_date_yy, vessel_number) %>% 
+  count(vessel_number) %>% 
+  filter(n>=10) %>% 
+  select(-n)
+
+gridcells <- grid %>% 
+  filter(inshore_area==1) %>% 
+  select(code) %>% 
+  rename(grid_code = code)
+
+## filter datasets
+
+drags.1 <- drags%>%
+  filter(docking_date_yy>2000) %>%  
+  right_join(vessels) %>% 
+  inner_join(gridcells)
+
+filter_drag <- drags.1 %>% 
+  distinct(drag_id)
+
+filter_land <- drags.1 %>% 
+  distinct(land_id)
+  
 drag_catches.1 <- drag_catches%>%
-#  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+  inner_join(filter_drag)
+
+landings.1 <- landings %>% 
+  inner_join(filter_land)
+
+landings_catches.1 <- landings_catches%>%
+  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+  inner_join(filter_land)
+
+##split all remaining shark records evenly between HNSH and SFSH
+
+drag_catches.2 <- drag_catches%>% 
   group_by(drag_id,
            vessel_number,
            docking_date_yy, 
@@ -68,7 +89,7 @@ drag_catches.1 <- drag_catches%>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK)) %>% 
-  pivot_longer(cols = 4:48, 
+  pivot_longer(cols = 4:50, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
@@ -78,15 +99,11 @@ drag_catches.1 <- drag_catches%>%
 test <- drag_catches%>%
   distinct(species_code, scientific_name)
 
-drag_catches.2 <- drag_catches.1%>%
+drag_catches.3 <- drag_catches.2%>%
   left_join(test)
 
 
-count(distinct(landings_catches, land_id))
-#8542
-
-landings_catches.1 <- landings_catches%>%
-  #  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+landings_catches.2 <- landings_catches.1%>%
   group_by(land_id,
            vessel_number, 
            docking_date_yy, 
@@ -98,7 +115,7 @@ landings_catches.1 <- landings_catches%>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK))%>%
-  pivot_longer(cols = 4:50, 
+  pivot_longer(cols = 4:49, 
                names_to = "species_code", 
                values_to = "nominal_mass", 
                values_drop_na = T) %>% 
@@ -108,21 +125,21 @@ landings_catches.1 <- landings_catches%>%
 test <- landings_catches%>%
   distinct(species_code, scientific_name)
 
-landings_catches.2 <- landings_catches.1%>%
+landings_catches.3 <- landings_catches.2%>%
   left_join(test)
   
 
 
 #connect to the sql database
-#con <- dbConnect(RPostgres::Postgres(),
- #                port = 5432,
-  #               user = "postgres",
-   #              password = "A.inodorus")
+con <- dbConnect(RPostgres::Postgres(),
+                 port = 5432,
+                 user = "postgres",
+                 password = "A.inodorus")
 
-#dbSendQuery(con, "create database masters_paper")
+dbSendQuery(con, "create database masters_paper")
 
 #close connection to the database
-#dbDisconnect(con)
+dbDisconnect(con)
 
 #connect to the sql database
 con <- dbConnect(RPostgres::Postgres(),
@@ -131,10 +148,10 @@ con <- dbConnect(RPostgres::Postgres(),
                  user = "postgres",
                  password = "A.inodorus")
 
-dbWriteTable(con, "drags",drags,overwrite = T )
-dbWriteTable(con, "landings",landings,overwrite = T )
-dbWriteTable(con, "drag_catches",drag_catches.2,overwrite = T )
-dbWriteTable(con, "landings_catches",landings_catches.2,overwrite = T )
+dbWriteTable(con, "drags",drags.1,overwrite = T )
+dbWriteTable(con, "landings",landings.1,overwrite = T )
+dbWriteTable(con, "drag_catches",drag_catches.3,overwrite = T )
+dbWriteTable(con, "landings_catches",landings_catches.3,overwrite = T )
 
 
 #close connection to the database

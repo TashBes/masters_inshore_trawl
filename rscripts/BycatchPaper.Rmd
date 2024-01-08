@@ -167,10 +167,10 @@ species[1:13,] %>%
   gt() %>% 
   tab_header(title = "Landed catch composition") %>% 
    cols_label(
-    scientific_name = html("**Scientific <br> Name**"),
-    nominal_mass = html("**Nominal <br> Mass**"),
-    cumsum = html("**Cumulative <br> Sum**"),
-    Percent_of_total = html("**Cumulative <br> Percentage**"),
+    scientific_name = html("**Scientific<br>Name**"),
+    nominal_mass = html("**Nominal<br>Mass**"),
+    cumsum = html("**Cumulative<br>Sum**"),
+    Percent_of_total = html("**Cumulative<br>Percentage**"),
     .fn = md) %>% 
   cols_align(align = c("center"),
              columns = c(nominal_mass, cumsum, Percent_of_total))
@@ -328,6 +328,18 @@ landing%>%
 #         legend.key=element_blank()
 
 ```
+
+Simper analysis of vessels
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+
+simper()
+vegan
+
+```
+
 
 
 cluster analysis of year
@@ -510,15 +522,18 @@ dm <- vegdist(test, method="bray", na.rm = T)
 cluster<- dm %>%
   hclust(method = "average")
 
+lbls <- c("1", "3", "2")
+
 x <- cluster%>%
   as.dendrogram()%>% 
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.06, groupLabels = T,
+  colour_branches(h = 0.06, groupLabels = lbls,
                   col = brewer.pal(3,"Paired"))
-plot(x)
-title(ylab = 'Dissimilarity', line = 2.5)
 
+tdro3 <- reorder(x, c(1, 4, 8, 5, 9, 7, 2, 6, 3, 10, 11, 12), mean)
+plot(tdro3)
+title(ylab = 'Dissimilarity', line = 2.5)
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
@@ -529,8 +544,8 @@ grp<- labels %>%
   t()%>%
   as_tibble()%>%
   rename(S1 = V1,
-         S2 = V2,
-         S3 = V3)%>%
+         S3 = V2,
+         S2 = V3)%>%
   pivot_longer(cols= 1:3,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
@@ -675,8 +690,8 @@ x <- cluster%>%
   as.dendrogram()%>% 
   dendextend::set("labels_cex", 0.7)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.20, groupLabels = TRUE,
-                  col = brewer.pal(6,"Paired"))
+  colour_branches(h = 0.15, groupLabels = TRUE,
+                  col = brewer.pal(10,"Paired"))
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
 title(xlab = 'Grid cells', line = 2)
@@ -685,7 +700,7 @@ title(xlab = 'Grid cells', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-dend_list <- get_subdendrograms(x,8)
+dend_list <- get_subdendrograms(x,10)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
   plyr::ldply( rbind)%>%
@@ -698,8 +713,10 @@ grp<- labels %>%
          G5 = V5,
          G6 = V6,
          G7 = V7,
-         G8 = V8)%>%
-  pivot_longer(cols= 1:8,names_to = "grp", values_drop_na = T )%>%
+         G8 = V8,
+         G9 = V9,
+         G10 = V10)%>%
+  pivot_longer(cols= 1:10,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
 
@@ -852,7 +869,7 @@ test <- landing%>%
 
 #random sample
 test.1 <- test %>%
-  slice_sample(prop = 0.01)
+  slice_sample(prop = 0.35)
 
 #distance matrix
 

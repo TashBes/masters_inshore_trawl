@@ -335,8 +335,24 @@ Simper analysis of vessels
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 
-simper()
-vegan
+simp_ves <- simper(ves.s[2:14],ves.s$grp)
+
+comparisons <- c("V4_V3", "V4_V3", "V4_V1", "V3_V2", "V3_V1", "V2_V1")
+
+simper.results <- c()
+
+for(i in 1:length(comparisons)) {
+require(tidyverse)
+temp <- summary(simp_ves)[as.character(comparisons[i])] %>%
+as.data.frame()
+colnames(temp) <- gsub(
+paste(comparisons[i],".", sep = ""), "", colnames(temp))
+temp <- temp %>%
+mutate(Comparison = comparisons[i],
+Position = row_number()) %>%
+  rownames_to_column(var = "Species")
+simper.results <- rbind(simper.results, temp)
+}
 
 ```
 

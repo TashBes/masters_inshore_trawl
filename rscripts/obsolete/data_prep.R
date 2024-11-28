@@ -18,13 +18,13 @@ con <- dbConnect(RPostgres::Postgres(),
                  password = "A.inodorus")
 
 
-drags <- dbGetQuery(con, "SELECT * FROM dit_drags_clean")
+drags <-sql_tbl_ext("masters_paper", "dit_drag_clean")
 
-landings <-  dbGetQuery(con, "SELECT * FROM dit_landings_clean")
+landings <-  sql_tbl_ext("masters_paper", "dit_landing_clean")
 
-drag_catches <-  dbGetQuery(con, "SELECT * FROM dit_drag_catches_clean")
-
-landings_catches <-  dbGetQuery(con, "SELECT * FROM dit_landings_catches_clean")
+# drag_catches <-  dbGetQuery(con, "SELECT * FROM dit_drag_catches_clean")
+# 
+# landings_catches <-  dbGetQuery(con, "SELECT * FROM dit_landings_catches_clean")
 
 #close connection to the database
 dbDisconnect(con)
@@ -35,7 +35,7 @@ grid <- read.csv("data/ComGrids.csv")
 ###--------------------------------------------------------------------------
 
 ##remove species codes that are not species
-##only take years fater 2000
+##only take years ater 2000
 ##only take vessel that fished in more than 50% years
 ##only take gridcells in the inshore trawl grounds
 

@@ -12,6 +12,7 @@ editor_options:
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 #load packages
+
 library(janitor)
 library(fuzzySim)
 library(ggthemes)
@@ -19,14 +20,14 @@ library(dendextend)
 library(vegan)
 library(tidyverse)
 library(lubridate)
-library(maptools)
+#library(maptools)
 library(maps)
 library(mapdata)
 library(wesanderson)
 library(RColorBrewer)
 library(sp)
 library(gridExtra)
-library(ggsn)  # north2() scalebar()
+#library(ggsn)  # north2() scalebar()
 library(rworldmap) 
 library(ggrepel)
 library(plotrix)
@@ -104,8 +105,8 @@ con <- dbConnect(RPostgres::Postgres(),
                  user = Sys.getenv("DB_USER"),
                  password = Sys.getenv("DB_PASSWORD"))
 
-drag <- dbReadTable(con, "dit_drag" )
-landing <- dbReadTable(con, "dit_landing" )
+drag <- dbReadTable(con, "dit_drag_clean" )
+landing <- dbReadTable(con, "dit_landing_clean" )
 
 
 #close connection to the database
@@ -122,7 +123,7 @@ dbDisconnect(con)
 test <- landing %>%
   distinct(species_code)
 
-#41
+#47
 
 ##total catch composition
 
@@ -138,14 +139,14 @@ test <- landing%>%
 ## Top species
 
 species <- landing %>%
-  mutate(nominal_mass= nominal_mass/1000)%>%
-  group_by(species_code, scientific_name, docking_date_yy)%>%
-  summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
-  pivot_wider(names_from = docking_date_yy, values_from = nominal_mass)%>%
-  mutate_all(~replace_na(.,0))%>%
-  pivot_longer(cols = 3:12, names_to = "docking_date_yy", values_to = "nominal_mass")%>%
-  group_by(species_code, scientific_name)%>%
-  summarise(nominal_mass=sum(nominal_mass)/10)
+  mutate(nominal_mass= nominal_mass/1000)%>% ##make tons
+  group_by(scientific_name, docking_date_yy)%>%
+  summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%  ##get total landed mass per year for each species
+  # pivot_wider(names_from = docking_date_yy, values_from = nominal_mass)%>% #pivot to a wider table
+  # mutate_all(~replace_na(.,0))%>%
+  # pivot_longer(cols = 3:12, names_to = "docking_date_yy", values_to = "nominal_mass")%>%
+  group_by(scientific_name)%>%
+  summarise(nominal_mass=sum(nominal_mass)/30)
 
 
 species <- species[order(-species$nominal_mass),]
@@ -153,27 +154,27 @@ species <- species[order(-species$nominal_mass),]
 species <- species %>%
   ungroup() %>% 
   mutate(cumsum = round(cumsum(nominal_mass))) %>%
+  mutate(percentage = round(nominal_mass/sum(nominal_mass)*100, digits= 2)) %>% 
   mutate(Percent_of_total = round(cumsum/sum(nominal_mass)*100, digits= 2))%>%
-#  mutate(percentage_landings= round(nominal_mass/sum(nominal_mass)*100, digits= 2))%>%
   mutate(nominal_mass= round(nominal_mass))
 
 
 topspp <- species %>%
-  filter(Percent_of_total < 98)%>%
-  select(species_code)
+  filter(Percent_of_total < 99)%>%
+  select(scientific_name)
 
 species[1:13,] %>% 
-  select(-species_code) %>% 
+  select(-cumsum) %>% 
   gt() %>% 
-  tab_header(title = "Landed catch composition") %>% 
+  tab_header(title = "Average yearly landed catch composition") %>% 
    cols_label(
-    scientific_name = html("**Scientific<br>Name**"),
-    nominal_mass = html("**Nominal<br>Mass**"),
-    cumsum = html("**Cumulative<br>Sum**"),
-    Percent_of_total = html("**Cumulative<br>Percentage**"),
+    scientific_name = html("**Scientific Name**"),
+    nominal_mass = html("**Landed mass (t)**"),
+    percentage = html("**Percentage**"),
+    Percent_of_total = html("**Cumulative Percentage**"),
     .fn = md) %>% 
   cols_align(align = c("center"),
-             columns = c(nominal_mass, cumsum, Percent_of_total))
+             columns = c(nominal_mass, percentage, Percent_of_total))
 ```
 
 
@@ -228,7 +229,7 @@ x <- cluster%>%
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
   colour_branches(h = 0.20, groupLabels = T,
-                  col = brewer.pal(4,"Paired"))
+                  col = "black")
 
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
@@ -273,8 +274,9 @@ mds <- metaMDS(dm,
 MDS_xy <- data.frame(mds$points, mds$stress)
 
 
-ggplot(MDS_xy, aes(MDS1, MDS2, colour = ves.s$grp, shape = ves.s$target_code)) +
+ggplot(MDS_xy, aes(MDS1, MDS2, shape = ves.s$target_code)) +
   geom_point(size = 5) + 
+  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = ves.s$grp, label = ves.s$grp))+
   theme(legend.title = element_text(size = 14, face = "bold"), 
         legend.text = element_text(size = 12, face = "bold"), 
         legend.position = "right", 
@@ -308,9 +310,9 @@ landing%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
   normalise(nominal_mass, grp, "grp")%>%
   mutate(norm = sqrt(norm))%>%
-  ggplot(aes(reorder(species_code, id), norm, fill = grp))+
+  ggplot(aes(reorder(species_code, id), norm))+
   geom_col( position = "dodge")+
-#  facet_wrap(~grp)+
+  facet_wrap(~grp)+
   theme(
         axis.text.x = element_text(face = "bold",colour = "black", size = 8, 
                                    angle = 90, vjust = 0.5, hjust=1), 
@@ -320,8 +322,9 @@ landing%>%
         axis.title.x = element_text(face = "bold", size = 12, colour = "black"),
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black")) +
-  labs(x = "Species code", y = "Proportion")+
-  scale_fill_brewer(palette = "Paired", aesthetics = "fill")
+  labs(x = "Species code", y = "Proportion")
+# +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "fill")
 
 # legend.title = element_blank(), 
 #         legend.position = "none", 
@@ -337,7 +340,7 @@ Simper analysis of vessels
 
 simp_ves <- simper(ves.s[2:14],ves.s$grp)
 
-comparisons <- c("V4_V3", "V4_V3", "V4_V1", "V3_V2", "V3_V1", "V2_V1")
+comparisons <- c("V4_V3","V4_V2", "V4_V1", "V3_V2", "V3_V1", "V2_V1")
 
 simper.results <- c()
 
@@ -353,6 +356,32 @@ Position = row_number()) %>%
   rownames_to_column(var = "Species")
 simper.results <- rbind(simper.results, temp)
 }
+
+simper.results.con <- simper.results %>%
+  filter(p <= 0.05) %>%
+  select(Species, average, Comparison) %>% 
+  mutate(average = round(average*100, digits = 3)) %>% 
+  pivot_wider(names_from = Comparison, values_from = average)
+
+grp1 <- grp %>%
+  rownames_to_column(var = "vessel_number")
+
+spp <- topspp %>%
+  rownames_to_column(var = "id")%>%
+  mutate(id = as.numeric(id))
+
+landing%>%
+  mutate(vessel_number = as.character(vessel_number)) %>% 
+  right_join(spp)%>%
+  left_join(grp1)%>%
+  group_by(grp,id,species_code)%>%
+  summarise(nominal_mass = round(mean(nominal_mass, na.rm = T), digits = 1)) %>% 
+  pivot_wider(names_from = grp, values_from = nominal_mass) %>% 
+  left_join(simper.results.con, by = c("species_code" = "Species"))%>% 
+  ungroup() %>% 
+  select(-id)%>%
+  select(1,6:8) %>% 
+  gt()
 
 ```
 
@@ -496,7 +525,52 @@ landing%>%
 
  #       legend.key=element_blank()legend.title = element_blank(),legend.position = "none",
 ```
+Simper analysis of year
 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+
+simp_year <- simper(year.s[2:14],year.s$grp)
+
+comparisons <- c("Y4_Y3", "Y2_Y3", "Y2_Y4", "Y1_Y3", "Y1_Y2", "Y1_Y4")
+
+simper.results <- c()
+
+for(i in 1:length(comparisons)) {
+require(tidyverse)
+temp <- summary(simp_year)[as.character(comparisons[i])] %>%
+as.data.frame()
+colnames(temp) <- gsub(
+paste(comparisons[i],".", sep = ""), "", colnames(temp))
+temp <- temp %>%
+mutate(Comparison = comparisons[i],
+Position = row_number()) %>%
+  rownames_to_column(var = "Species")
+simper.results <- rbind(simper.results, temp)
+}
+
+simper.results.con <- simper.results %>%
+  filter(p <= 0.05) %>%
+  select(Species, average, Comparison) %>% 
+  mutate(average = round(average*100, digits = 2)) %>% 
+  pivot_wider(names_from = Comparison, values_from = average)
+
+
+landing%>%
+  right_join(spp)%>%
+  mutate(docking_date_yy = as.character(docking_date_yy)) %>% 
+  right_join(grp)%>%
+  group_by(grp, id, species_code)%>%
+  summarise(nominal_mass = round(mean(nominal_mass, na.rm = T), digits = 1)) %>% 
+  pivot_wider(names_from = grp, values_from = nominal_mass) %>% 
+  left_join(simper.results.con, by = c("species_code" = "Species"))%>% 
+  ungroup() %>% 
+  select(-id)%>%
+  select(1,6:11) %>% 
+  gt()
+
+```
 
 Cluster analysis of months
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
@@ -641,7 +715,52 @@ month%>%
 #legend.title = element_blank(), legend.key=element_blank()
 
 ```
+Simper analysis of months
 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+
+simp_year <- simper(year.s[2:14],year.s$grp)
+
+comparisons <- c("Y4_Y3", "Y2_Y3", "Y2_Y4", "Y1_Y3", "Y1_Y2", "Y1_Y4")
+
+simper.results <- c()
+
+for(i in 1:length(comparisons)) {
+require(tidyverse)
+temp <- summary(simp_year)[as.character(comparisons[i])] %>%
+as.data.frame()
+colnames(temp) <- gsub(
+paste(comparisons[i],".", sep = ""), "", colnames(temp))
+temp <- temp %>%
+mutate(Comparison = comparisons[i],
+Position = row_number()) %>%
+  rownames_to_column(var = "Species")
+simper.results <- rbind(simper.results, temp)
+}
+
+simper.results.con <- simper.results %>%
+  filter(p <= 0.05) %>%
+  select(Species, average, Comparison) %>% 
+  mutate(average = round(average*100, digits = 2)) %>% 
+  pivot_wider(names_from = Comparison, values_from = average)
+
+
+landing%>%
+  right_join(spp)%>%
+  mutate(docking_date_yy = as.character(docking_date_yy)) %>% 
+  right_join(grp)%>%
+  group_by(grp, id, species_code)%>%
+  summarise(nominal_mass = round(mean(nominal_mass, na.rm = T), digits = 1)) %>% 
+  pivot_wider(names_from = grp, values_from = nominal_mass) %>% 
+  left_join(simper.results.con, by = c("species_code" = "Species"))%>% 
+  ungroup() %>% 
+  select(-id)%>%
+  select(1,6:11) %>% 
+  gt()
+
+```
 cluster analysis of area
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
@@ -655,14 +774,14 @@ RSA <- c("South Africa")
 # Call the vector in `borders()`
 world_saf <- world[world@data$ADMIN %in% RSA, ]
 
-comm_grids <- read.csv(here("data/ComGrids.csv")) %>% 
-  filter(inshore_area ==1)
-
-grid_mid <- comm_grids%>%
-  mutate(mid_lat = (maximum_latitude+minimum_latitude)/2)%>%
-  mutate(mid_long = (maximum_longitude+minimum_longitude)/2)%>%
-  select(code, mid_lat, mid_long)%>%
-  mutate(grid_code = as.character(code), .keep = "unused")
+# comm_grids <- read.csv(here("data/ComGrids.csv")) %>% 
+#   filter(inshore_area ==1)
+# 
+# grid_mid <- comm_grids%>%
+#   mutate(mid_lat = (maximum_latitude+minimum_latitude)/2)%>%
+#   mutate(mid_long = (maximum_longitude+minimum_longitude)/2)%>%
+#   select(code, mid_lat, mid_long)%>%
+#   mutate(grid_code = as.character(code), .keep = "unused")
 
 
 #spp composition of area
@@ -677,8 +796,7 @@ count <- drag %>%
   select(grid_code)
 
 grid <- drag%>%
-  left_join(select(drag,drag_id, depth, grid_code))%>%
-  right_join(count)%>%
+#  right_join(count)%>%
   right_join(topspp)%>%
   group_by(grid_code, species_code)%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
@@ -707,7 +825,7 @@ x <- cluster%>%
   dendextend::set("labels_cex", 0.7)%>%
   dendextend::set("branches_lwd", 2)%>%
   colour_branches(h = 0.15, groupLabels = TRUE,
-                  col = brewer.pal(10,"Paired"))
+                  col = "black")
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
 title(xlab = 'Grid cells', line = 2)
@@ -716,7 +834,7 @@ title(xlab = 'Grid cells', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-dend_list <- get_subdendrograms(x,10)
+dend_list <- get_subdendrograms(x,7)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
   plyr::ldply( rbind)%>%
@@ -728,17 +846,15 @@ grp<- labels %>%
          G4 = V4,
          G5 = V5,
          G6 = V6,
-         G7 = V7,
-         G8 = V8,
-         G9 = V9,
-         G10 = V10)%>%
-  pivot_longer(cols= 1:10,names_to = "grp", values_drop_na = T )%>%
+         G7 = V7)%>%
+  pivot_longer(cols= 1:7,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
 
 
 grid.s <- grid %>%
-  merge( grp, by = "row.names")
+  merge( grp, by = "row.names") %>%
+  mutate(grp = if_else(grp == "G3", "G4", grp))
 
 #write.csv(grid.s, "simp.area.csv", row.names = F)
 #### MDS
@@ -759,8 +875,9 @@ mds <- metaMDS(dm,
 MDS_xy <- data.frame(mds$points)
 
 
-ggplot(MDS_xy, aes(MDS1, MDS2, colour = grid.s$grp )) +   #, shape =grid.s$grp
+ggplot(MDS_xy, aes(MDS1, MDS2 )) +   #, shape =grid.s$grp
   geom_point(size = 6)+
+  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = grid.s$grp, label = grid.s$grp))+
   #  geom_text(label = grid.s$Row.names)+
   theme(legend.title = element_text(size = 14, face = "bold"), 
         legend.text = element_text(size = 12, face = "bold"), 
@@ -775,7 +892,7 @@ ggplot(MDS_xy, aes(MDS1, MDS2, colour = grid.s$grp )) +   #, shape =grid.s$grp
   labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "group") +
   scale_fill_brewer(palette = "Paired", aesthetics = "colour", 
                     breaks=c('G1', 'G2','G3','G4','G5',
-                             'G6','G7','G8', "G9"))
+                             'G6', 'G7'))
 
 
 ```
@@ -784,9 +901,15 @@ ggplot(MDS_xy, aes(MDS1, MDS2, colour = grid.s$grp )) +   #, shape =grid.s$grp
 
 #map
 #grids.map <- read.csv(here("data/map_grid.csv"))
+test <- grid.s %>% 
+  count(Row.names)
+
+test <- drag %>% 
+  count(grid_code)
 
 grid.s <- grid.s %>%
-  left_join(grid_mid, by = c("Row.names"="grid_code"))%>%
+  mutate(Row.names = as.numeric(Row.names)) %>% 
+  left_join(distinct(select(drag, grid_code, mid_lat, mid_long)), by = c("Row.names"="grid_code"))%>%
   select(c(Row.names, grp, mid_lat, mid_long))
 
 ggplot() +
@@ -837,12 +960,13 @@ test <- drag%>%
   group_by(grp, id, species_code) %>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T)) %>%
   normalise(nominal_mass,grp, "grp") %>%
-  mutate(norm = sqrt(norm))
+  mutate(norm = sqrt(norm))%>%
+  mutate(grp = if_else(grp == "G3", "G4", grp))
 
 test%>%
-  ggplot(aes(reorder(species_code, id), norm, fill = grp))+
+  ggplot(aes(reorder(species_code, id), norm))+
   geom_col(position = "dodge")+
-#  facet_wrap(~grp, scales = "free_y")+
+  facet_wrap(~grp, scales = "free_y")+
   theme(
         axis.text.x = element_text(face = "bold",colour = "black", size = 8,
                                    angle = 90, vjust = 0.5, hjust=1), 
@@ -852,8 +976,9 @@ test%>%
         axis.title.x = element_text(face = "bold", size = 12, colour = "black"),
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black")) +
-  labs(x = "Species", y = "Proportion")+
-  scale_fill_brewer(palette = "Paired", aesthetics = "fill")
+  labs(x = "Species", y = "Proportion")
+# +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "fill")
 
 # legend.title = element_blank(), 
 #         legend.text = element_blank(), 
@@ -868,8 +993,8 @@ Catch composition model per trip
 ## PERMANOVA model 1 - year, season, vessel - trip data
 
 test <- landing%>%
-  select(-scientific_name) %>% 
   right_join(topspp)%>%
+  select(-scientific_name) %>% 
 #  mutate(cpue = nominal_mass/trip_length_dd) %>% 
   normalise(nominal_mass, land_id, "land_id")%>%
   mutate(norm = sqrt(norm))%>%
@@ -885,7 +1010,7 @@ test <- landing%>%
 
 #random sample
 test.1 <- test %>%
-  slice_sample(prop = 0.35)
+  slice_sample(prop = 0.05)
 
 #distance matrix
 
@@ -895,7 +1020,8 @@ dm <- vegdist(test.1[7:19], method="bray", na.rm = T)
 #Do a PERMANOVA
 
 permanova <- adonis2(dm~ docking_date_yy*docking_date_mm*vessel_number, data = test.1[1:6])
-permanova%>% 
+summary(permanova)
+%>% 
   rownames_to_column(var = "ExplanatoryVariables") %>% 
   gt()
 

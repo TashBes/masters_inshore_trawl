@@ -22,7 +22,7 @@ dbDisconnect(con)
 
 ##extract data
 
-extract_accs("/data/DemersalInshoreTrawl1990-2019_REQUESTS.accdb")
+extract_accs("DemersalInshoreTrawl1990-2019_REQUESTS.accdb")
 
 
 ##add the tables into the databse

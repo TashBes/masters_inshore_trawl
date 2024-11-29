@@ -920,11 +920,12 @@ landings_catches.1 <- landings_catches.1 %>%
 #clean species names
 
 drag_catches.1 <- drag_catches.1 %>%
-  clean_names(scientific_name)
+  createDB::clean_names(scientific_name)
 landings_catches.1 <- landings_catches.1 %>%
-  clean_names(scientific_name)
+  createDB::clean_names(scientific_name)
 
 # add in missing longs and lats
+#remove records with no grid codes and grid codes 921 and 916
 grids <- read.csv("data/ComGrids.csv")
 
 grid_midpnt <- grids %>%
@@ -932,16 +933,16 @@ grid_midpnt <- grids %>%
   mutate(mid_long = minimum_longitude + ((maximum_longitude - minimum_longitude)/2)) %>%
   select(code, mid_lat, mid_long)
 
-drags.1  <- drags.1 %>%
+drags.2  <- drags.1 %>%
   left_join(grid_midpnt, by = c("grid_code" = "code")) %>%
-  mutate(start_latitude = if_else(start_latitude == 0 | is.na(start_latitude), mid_lat, start_latitude))%>%
-  mutate(start_longitude = if_else(start_longitude == 0 | is.na(start_longitude), mid_long, start_longitude)) %>%
-  filter(!is.na(start_latitude)| !is.na(grid_code)) %>%
-  filter(!grid_code %in% c("921", "916"))
+  # mutate(start_latitude = if_else(start_latitude == 0 | is.na(start_latitude), mid_lat, start_latitude))%>%
+  # mutate(start_longitude = if_else(start_longitude == 0 | is.na(start_longitude), mid_long, start_longitude)) %>%
+  filter(!is.na(grid_code))%>%
+  filter(!grid_code %in% c("921", "916")) ##bc has no midpoint coords
 
 ##only take locations within the eez
-
-drags.2 <- clean_area(drags.1, "start_longitude", "start_latitude")
+# 
+# drags.2 <- clean_area(drags.1, "start_longitude", "start_latitude", "eez_mainlandRSA_buffered_1km_allEEZversions.shp", 20)
 
 
 ### filter records
@@ -963,28 +964,99 @@ vessels <- landings.1 %>%
   filter(n>=15) %>%
   select(-n)
 
-gridcells <- grids %>%
-  filter(inshore_area==1) %>%
-  select(code) %>%
-  rename(grid_code = code)
+# gridcells <- grids %>%
+#   filter(inshore_area==1) %>%
+#   select(code) %>%
+#   rename(grid_code = code)
+
+gridcells <- c("512", 
+               "513",
+               "514", 
+               "515", 
+               "516", 
+               "517", 
+               "518", 
+               "519", 
+               "520", 
+               "521", 
+               "522", 
+               "523", 
+               "524", 
+               "525", 
+               "526", 
+               "527", 
+               "528", 
+               "529", 
+               "530", 
+               "531", 
+               "532", 
+               "533", 
+               "535", 
+               "536", 
+               "537", 
+               "538", 
+               "539", 
+               "540", 
+               "541", 
+               "542", 
+               "543", 
+               "550", 
+               "551", 
+               "552", 
+               "553", 
+               "554", 
+               "555", 
+               "556", 
+               "565", 
+               "566", 
+               "567", 
+               "568", 
+               "569", 
+               "570", 
+               "583", 
+               "584", 
+               "622", 
+               "625", 
+               "628", 
+               "629", 
+               "632", 
+               "633", 
+               "636", 
+               "640")##all gridcells within the 200 meter contour line
+
 
 ## combine datasets and filter them
 
 drag <- drags.2 %>%
   full_join(drag_catches.1)%>%
-  group_by(land_id, drag_id, docking_date_yy, docking_date_mm, vessel_number, grid_code, depth, target_species_code,
+  group_by(land_id, drag_id, docking_date_yy, docking_date_mm,
+           vessel_number, grid_code,mid_lat,mid_long, target_species_code,
            species_code, scientific_name, trawl_length_hh) %>%
   summarise(nominal_mass = sum(nominal_mass)) %>%
   ungroup() %>%
   right_join(vessels) %>%
-  right_join(gridcells) %>%
+#  right_join(gridcells) %>%
+  filter(grid_code %in% gridcells) %>% 
   filter(!is.na(land_id))%>%
   filter(!species_code %in% c("DEMF", "DEMLIN")) %>%
   filter(between(trawl_length_hh, 0.5, 9))%>%
   filter(!is.na(species_code))%>%
   filter(!is.na(nominal_mass))
 
+eez <- sf::st_read(dir("data", "eez_mainlandRSA_buffered_1km_allEEZversions.shp", full.names = T, recursive = T))
+
+map <- drag %>%
+  distinct(grid_code,mid_lat,mid_long) %>% 
+  sf::st_as_sf(coords = c("mid_long", "mid_lat"), crs = 4326)%>%
+  sf::st_transform(crs = sf::st_crs(eez))
+
+ggplot()+
+  geom_sf(data = eez, fill = NA )+
+  geom_sf(data = map, size = 1)+
+  theme_classic()
+
 test <- drag %>%
+  count(grid_code)
   filter(is.na(nominal_mass))
 
 trips <- drag %>%
@@ -1056,8 +1128,8 @@ con <- sql_con("masters_paper")
 
 
 
-dbWriteTable(con, "dit_drag",drag.1,overwrite = T )
-dbWriteTable(con, "dit_landing",landing.1,overwrite = T )
+dbWriteTable(con, "dit_drag_clean",drag.1,overwrite = T )
+dbWriteTable(con, "dit_landing_clean",landing.1,overwrite = T )
 
 dbDisconnect(con)
 

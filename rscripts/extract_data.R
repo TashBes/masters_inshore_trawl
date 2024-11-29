@@ -13,7 +13,7 @@ library(createDB)
 con <- dbConnect(RPostgres::Postgres(),
                  port = Sys.getenv("DB_PORT"),
                  user = Sys.getenv("DB_USER"),
-                 password = Sys.getenv("DB_PASSWORD"))
+                 password = Sys.getenv("DB_PASSWORD")) 
 
 dbSendQuery(con, "create database masters_paper")
 

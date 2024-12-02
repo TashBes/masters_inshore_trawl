@@ -724,6 +724,7 @@ drag.sub <- drag.sub %>%
 #trip and trawl records
 
 #trip
+unique(landings_catches.1$species_code)
 landings_catches.1 <- landings_catches.1 %>%
   mutate(species_code = ifelse(species_code == "SOLE"|
                                  species_code == "SOL"|
@@ -897,12 +898,16 @@ species_names <- data.frame(species_code, scientific_name)
 #add scientific names
 
 drag_catches.1 <- drag_catches.1 %>%
-  left_join(species_names, by = "species_code")
+  left_join(species_names, by = "species_code") %>% 
+  filter(species_code != "unknown") #remove unknown species codes
 
 landings_catches.1 <- landings_catches.1 %>%
-  left_join(species_names, by = "species_code")
+  left_join(species_names, by = "species_code")%>% 
+  filter(species_code != "unknown") #remove unknown species codes
 
 spp <- landings_catches.1 %>%
+  distinct(species_code, scientific_name)
+spp1 <- drag_catches.1 %>%
   distinct(species_code, scientific_name)
 
 #make fields lower case
@@ -918,11 +923,11 @@ landings_catches.1 <- landings_catches.1 %>%
   rename(land_id = land_ID)
 
 #clean species names
-
-drag_catches.1 <- drag_catches.1 %>%
-  createDB::clean_names(scientific_name)
-landings_catches.1 <- landings_catches.1 %>%
-  createDB::clean_names(scientific_name)
+# 
+# drag_catches.1 <- drag_catches.1 %>%
+#   createDB::clean_names(scientific_name)
+# landings_catches.1 <- landings_catches.1 %>%
+#   createDB::clean_names(scientific_name)
 
 # add in missing longs and lats
 #remove records with no grid codes and grid codes 921 and 916
@@ -1038,12 +1043,12 @@ drag <- drags.2 %>%
 #  right_join(gridcells) %>%
   filter(grid_code %in% gridcells) %>% 
   filter(!is.na(land_id))%>%
-  filter(!species_code %in% c("DEMF", "DEMLIN")) %>%
+  filter(!species_code %in% c("DEMF", "DEMLIN", "RDFS")) %>%
   filter(between(trawl_length_hh, 0.5, 9))%>%
   filter(!is.na(species_code))%>%
   filter(!is.na(nominal_mass))
 
-eez <- sf::st_read(dir("data", "eez_mainlandRSA_buffered_1km_allEEZversions.shp", full.names = T, recursive = T))
+eez <- sf::st_read(dir("data", "eez_mainlandRSA_buffered_1km_allEEZversions.shp", full.names = T, recursive = T)[1])
 
 map <- drag %>%
   distinct(grid_code,mid_lat,mid_long) %>% 
@@ -1071,7 +1076,7 @@ landing <- landings.1 %>%
   ungroup() %>%
   right_join(trips)%>%
   filter(!is.na(land_id))%>%
-  filter(!species_code %in% c("DEMF", "DEMLIN"))%>%
+  filter(!species_code %in% c("DEMF", "DEMLIN", "RDFS"))%>%
   filter(trip_length_dd >2)%>%
   filter(number_of_trawls >2)%>%
   filter(!is.na(species_code))
@@ -1095,7 +1100,7 @@ drag.1 <- drag %>%
   mutate(HNSH = HNSH+(SHRK/2))%>%
   mutate(SFSH = SFSH+(SHRK/2))%>%
   select(-c(SHRK))%>%
-  pivot_longer(cols = 10:56,
+  pivot_longer(cols = 11:57,
                names_to = "species_code",
                values_to = "nominal_mass",
                values_drop_na = T) %>%
@@ -1119,7 +1124,7 @@ landing.1 <- landing%>%
   na.omit()  %>%
   left_join(species_names, by = "species_code")
 
-test <- landing.1 %>% 
+test <- drag.1 %>% 
   distinct(species_code, scientific_name)
 
 ## save tables to clean database

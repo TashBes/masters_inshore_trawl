@@ -156,7 +156,9 @@ species <- species %>%
   mutate(cumsum = round(cumsum(nominal_mass))) %>%
   mutate(percentage = round(nominal_mass/sum(nominal_mass)*100, digits= 2)) %>% 
   mutate(Percent_of_total = round(cumsum/sum(nominal_mass)*100, digits= 2))%>%
-  mutate(nominal_mass= round(nominal_mass))
+  mutate(nominal_mass= round(nominal_mass)) 
+# %>% 
+#   filter(scientific_name != "Demersal")
 
 
 topspp <- species %>%
@@ -187,12 +189,12 @@ target_code <- drag %>%
   count(vessel_number, target_species_code)%>%
   normalise(n, vessel_number, "vessel_number")%>%
   filter(!norm<0.5)%>%
-  mutate(target_code = if_else(norm>0.5 & 
+  mutate(target_code = if_else(norm>0.75 & 
                                  target_species_code == "HAKE", 
                                "Hake",
-                               if_else(norm>0.5 & 
+                               if_else(norm>0.75 & 
                                          target_species_code == "ECSOLE", 
-                                       "Sole", "both"), "both"))
+                                       "Sole", "both")))
 
 
 
@@ -228,7 +230,7 @@ x <- cluster%>%
   as.dendrogram()%>% 
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.20, groupLabels = T,
+  colour_branches(h = 0.13, groupLabels = T,
                   col = "black")
 
 plot(x)
@@ -240,13 +242,13 @@ title(xlab = 'Vessels', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 #get the cluster groups into the catch comp dataframe
-dend_list <- get_subdendrograms(x, 4)
+dend_list <- get_subdendrograms(x, 5)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
   plyr::ldply( rbind)%>%
   t()%>%
   as_tibble()%>%
-  pivot_longer(cols= 1:4,names_to = "grp", values_drop_na = T )%>%
+  pivot_longer(cols= 1:5,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
 ves.s <- test %>% 
@@ -380,7 +382,7 @@ landing%>%
   left_join(simper.results.con, by = c("species_code" = "Species"))%>% 
   ungroup() %>% 
   select(-id)%>%
-  select(1,6:8) %>% 
+  select(1,7:9) %>% 
   gt()
 
 ```
@@ -824,7 +826,7 @@ x <- cluster%>%
   as.dendrogram()%>% 
   dendextend::set("labels_cex", 0.7)%>%
   dendextend::set("branches_lwd", 2)%>%
-  colour_branches(h = 0.15, groupLabels = TRUE,
+  colour_branches(h = 0.13, groupLabels = TRUE,
                   col = "black")
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
@@ -834,7 +836,7 @@ title(xlab = 'Grid cells', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-dend_list <- get_subdendrograms(x,7)
+dend_list <- get_subdendrograms(x,10)
 labels <- lapply(dend_list, labels)
 grp<- labels %>%
   plyr::ldply( rbind)%>%
@@ -846,15 +848,20 @@ grp<- labels %>%
          G4 = V4,
          G5 = V5,
          G6 = V6,
-         G7 = V7)%>%
-  pivot_longer(cols= 1:7,names_to = "grp", values_drop_na = T )%>%
+         G7 = V7,
+         G8 = V8,
+         G9 = V9,
+         G10 = V10)%>%
+  pivot_longer(cols= 1:10,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
 
 
 grid.s <- grid %>%
-  merge( grp, by = "row.names") %>%
-  mutate(grp = if_else(grp == "G3", "G4", grp))
+  merge( grp, by="row.names") %>%
+  mutate(grp = if_else(grp == "G2", "G3", grp))%>%
+  mutate(grp = if_else(grp == "G4", "G5", grp))%>%
+  mutate(grp = if_else(grp == "G7", "G8", grp))
 
 #write.csv(grid.s, "simp.area.csv", row.names = F)
 #### MDS
@@ -877,7 +884,7 @@ MDS_xy <- data.frame(mds$points)
 
 ggplot(MDS_xy, aes(MDS1, MDS2 )) +   #, shape =grid.s$grp
   geom_point(size = 6)+
-  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = grid.s$grp, label = grid.s$grp))+
+  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = grid.s$grp))+
   #  geom_text(label = grid.s$Row.names)+
   theme(legend.title = element_text(size = 14, face = "bold"), 
         legend.text = element_text(size = 12, face = "bold"), 
@@ -892,7 +899,7 @@ ggplot(MDS_xy, aes(MDS1, MDS2 )) +   #, shape =grid.s$grp
   labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "group") +
   scale_fill_brewer(palette = "Paired", aesthetics = "colour", 
                     breaks=c('G1', 'G2','G3','G4','G5',
-                             'G6', 'G7'))
+                             'G6', 'G7', 'G8', 'G9', 'G10'))
 
 
 ```
@@ -961,7 +968,9 @@ test <- drag%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T)) %>%
   normalise(nominal_mass,grp, "grp") %>%
   mutate(norm = sqrt(norm))%>%
-  mutate(grp = if_else(grp == "G3", "G4", grp))
+  mutate(grp = if_else(grp == "G2", "G3", grp))%>%
+  mutate(grp = if_else(grp == "G4", "G5", grp))%>%
+  mutate(grp = if_else(grp == "G7", "G8", grp))
 
 test%>%
   ggplot(aes(reorder(species_code, id), norm))+
@@ -986,6 +995,68 @@ test%>%
 #         legend.key=element_blank()
 
 ```
+
+differences in vessel catches by area across the months
+```{r}
+##are vessels fishing in the same blocks the whole year? 
+##if not, are all vessels fishing in the same areas?
+
+##get each vessels effort per grid cell per month
+
+seasonal_effort_per_ves <- drag %>% 
+  distinct(drag_id, vessel_number, docking_date_mm, grid_code) %>% 
+  count(vessel_number, docking_date_mm, grid_code) %>%  #count number of trawls in each grid, each month, per vessel
+  pivot_wider(names_from = grid_code, values_from = n) %>%
+  mutate_all(~replace_na(.,0)) %>% 
+  left_join(select(ves.s, Row.names, grp, target_code), by = c("vessel_number" = "Row.names"))%>% 
+  mutate(docking_date_mm = as.character(docking_date_mm))%>% 
+  mutate(vessel_number = as.character(vessel_number))
+
+
+
+dm <- vegdist(seasonal_effort_per_ves[3:56], method="bray", na.rm = T)
+
+#Do MDS
+mds <- metaMDS(dm, 
+               k=3,
+               try=15, trymax=20,
+               autotransform = FALSE,
+               trace = F)         #if it doesn't converge increase k by 1. 
+
+
+MDS_xy <- data.frame(mds$points)
+
+
+ggplot(MDS_xy, aes(MDS1, MDS2 , shape = seasonal_effort_per_ves$target_code, colour = seasonal_effort_per_ves$docking_date_mm)) +   #, shape =grid.s$grp
+  geom_point(size = 6 )+
+  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = seasonal_effort_per_ves$grp))+
+  #  geom_text(label = grid.s$Row.names)+
+  theme(legend.title = element_text(size = 14, face = "bold"), 
+        legend.text = element_text(size = 12, face = "bold"), 
+        legend.position = "right", 
+        axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
+        axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
+        axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
+        axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
+        panel.background = element_blank(), 
+        panel.border = element_rect(fill = NA, colour = "black"), 
+        legend.key=element_blank()) + 
+  labs(x = "MDS 1", y = "MDS 2", colour = "Month", shape = "target species") +
+  scale_colour_brewer(palette = "Paired", aesthetics = "colour")
+
+
+
+##do permanova
+permanova <- adonis2(dm~ vessel_number+docking_date_mm, data = seasonal_effort_per_ves[1:2], by =   "terms")
+permanova%>% 
+  rownames_to_column(var = "ExplanatoryVariables") %>% 
+  gt()
+
+
+
+```
+
+
 
 Catch composition model per trip
 ```{r echo=FALSE, message=FALSE, warning=FALSE}

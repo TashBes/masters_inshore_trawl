@@ -424,7 +424,7 @@ x <- cluster%>%
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
   colour_branches(h = 0.1, groupLabels = T,
-                  col = brewer.pal(4, "Paired"))
+                  col = "black")
 plot(x)
 title(ylab = 'Dissimilarity', line = 2.5)
 title(xlab = 'Years', line = 2)
@@ -470,10 +470,11 @@ MDS_xy <- data.frame(mds$points)
 test <- year.s %>%
   mutate(path = "a")
 
-ggplot(MDS_xy, aes(MDS1, MDS2, colour = test$grp)) +
+ggplot(MDS_xy, aes(MDS1, MDS2)) + #, colour = test$grp
   geom_path(group= test$path)+
   geom_text(label= test$Row.names, nudge_x = 0.015)+
   #  geom_line(group= test$grp)+
+  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = test$grp, label = test$grp))+
   geom_point(size = 2) + 
   theme(legend.title = element_text(size = 14, face = "bold"), 
         legend.text = element_text(size = 12, face = "bold"), 
@@ -485,8 +486,9 @@ ggplot(MDS_xy, aes(MDS1, MDS2, colour = test$grp)) +
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black"), 
         legend.key=element_blank()) + 
-  labs(x = "MDS 1", y = "MDS 2", colour = "group") +
-  scale_fill_brewer(palette = "Paired", aesthetics = "colour")
+  labs(x = "MDS 1", y = "MDS 2", colour = "Cluster") 
+# +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "colour")
 
 ```
 
@@ -510,9 +512,9 @@ landing%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
   normalise(nominal_mass,grp, "grp")%>%
   mutate(norm = sqrt(norm))%>%
-  ggplot(aes(reorder(species_code, id), norm, fill = grp))+
+  ggplot(aes(reorder(species_code, id), norm))+ #, fill = grp
   geom_col(position = "dodge")+
- # facet_wrap(~grp)+
+  facet_wrap(~grp)+
   theme(
         axis.text.x = element_text(face = "bold",colour = "black", size = 8, 
                                    angle = 90, vjust = 0.5, hjust=1), 
@@ -522,8 +524,9 @@ landing%>%
         axis.title.x = element_text(face = "bold", size = 12, colour = "black"),
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black")) +
-  labs(x = "Species code", y = "Proportion")+
-  scale_fill_brewer(palette = "Paired", aesthetics = "fill")
+  labs(x = "Species code", y = "Proportion")
+# +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "fill")
 
  #       legend.key=element_blank()legend.title = element_blank(),legend.position = "none",
 ```
@@ -569,7 +572,7 @@ landing%>%
   left_join(simper.results.con, by = c("species_code" = "Species"))%>% 
   ungroup() %>% 
   select(-id)%>%
-  select(1,6:11) %>% 
+  select(1,6:10) %>% 
   gt()
 
 ```
@@ -664,8 +667,9 @@ mds <- metaMDS(dm,
 MDS_xy <- data.frame(mds$points)
 
 
-ggplot(MDS_xy, aes(MDS1, MDS2, colour = sea.s$grp, shape = sea.s$season)) +
+ggplot(MDS_xy, aes(MDS1, MDS2,  shape = sea.s$season)) + #colour = sea.s$grp,
   geom_point(size = 6) + 
+  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = sea.s$grp, label = sea.s$grp))+
   theme(legend.title = element_text(size = 14, face = "bold"), 
         legend.text = element_text(size = 12, face = "bold"), 
         legend.position = "right", 
@@ -698,10 +702,10 @@ month%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
   normalise(nominal_mass,grp, "grp")%>%
   mutate(norm = sqrt(norm))%>%
-  ggplot(aes(reorder(species_code, id), fill = grp, norm))+
+  ggplot(aes(reorder(species_code, id),  norm))+ #fill = grp,
   geom_col(position = "dodge")+
   ylim(0,NA)+
-#  facet_wrap(~grp)+
+  facet_wrap(~grp)+
   theme(
         axis.text.x = element_text(face = "bold",colour = "black", size = 8, 
                                    angle = 90, vjust = 0.5, hjust=1), 
@@ -711,8 +715,9 @@ month%>%
         axis.title.x = element_text(face = "bold", size = 12, colour = "black"),
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black")) +
-  labs(x = "Species code", y = "Proportion")+
-  scale_fill_brewer(palette = "Paired", aesthetics = "fill")
+  labs(x = "Species code", y = "Proportion")
+# +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "fill")
 
 #legend.title = element_blank(), legend.key=element_blank()
 
@@ -751,15 +756,16 @@ simper.results.con <- simper.results %>%
 
 landing%>%
   right_join(spp)%>%
-  mutate(docking_date_yy = as.character(docking_date_yy)) %>% 
-  right_join(grp)%>%
+  mutate(docking_date_yy = as.character(docking_date_yy))%>% 
+  mutate(docking_date_mm = as.character(docking_date_mm))%>% 
+  right_join(season, by = c("docking_date_mm" = "month"))%>%
   group_by(grp, id, species_code)%>%
   summarise(nominal_mass = round(mean(nominal_mass, na.rm = T), digits = 1)) %>% 
   pivot_wider(names_from = grp, values_from = nominal_mass) %>% 
   left_join(simper.results.con, by = c("species_code" = "Species"))%>% 
   ungroup() %>% 
   select(-id)%>%
-  select(1,6:11) %>% 
+  select(1,6:9) %>% 
   gt()
 
 ```
@@ -997,7 +1003,7 @@ test%>%
 ```
 
 differences in vessel catches by area across the months
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 ##are vessels fishing in the same blocks the whole year? 
 ##if not, are all vessels fishing in the same areas?
 
@@ -1006,11 +1012,19 @@ differences in vessel catches by area across the months
 seasonal_effort_per_ves <- drag %>% 
   distinct(drag_id, vessel_number, docking_date_mm, grid_code) %>% 
   count(vessel_number, docking_date_mm, grid_code) %>%  #count number of trawls in each grid, each month, per vessel
-  pivot_wider(names_from = grid_code, values_from = n) %>%
-  mutate_all(~replace_na(.,0)) %>% 
+  unite(col = "id",  vessel_number, docking_date_mm, sep = "_", remove = F) %>% 
+  normalise(n, id, "id") %>% 
+  mutate(norm = sqrt(norm))%>%
+  select(vessel_number, docking_date_mm, grid_code, norm) %>% 
+  pivot_wider(names_from = grid_code, values_from = norm) %>%
+  mutate_all(~replace_na(.,0)) %>%
   left_join(select(ves.s, Row.names, grp, target_code), by = c("vessel_number" = "Row.names"))%>% 
-  mutate(docking_date_mm = as.character(docking_date_mm))%>% 
-  mutate(vessel_number = as.character(vessel_number))
+  mutate(vessel_number = as.character(vessel_number)) %>% 
+  mutate(season = quarter(docking_date_mm)) %>% 
+  mutate(season = if_else(season == 1, "Summer", 
+                          if_else(season == 2, "Autumn", 
+                                  if_else(season == 3, "Winter", "Spring")))) %>% 
+  mutate(docking_date_mm = as.character(docking_date_mm))
 
 
 
@@ -1027,9 +1041,11 @@ mds <- metaMDS(dm,
 MDS_xy <- data.frame(mds$points)
 
 
-ggplot(MDS_xy, aes(MDS1, MDS2 , shape = seasonal_effort_per_ves$target_code, colour = seasonal_effort_per_ves$docking_date_mm)) +   #, shape =grid.s$grp
-  geom_point(size = 6 )+
-  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = seasonal_effort_per_ves$grp))+
+ggplot(MDS_xy, aes(MDS1, MDS2)) +   
+  geom_point(aes(shape = seasonal_effort_per_ves$grp,
+                   fill = seasonal_effort_per_ves$season) ,
+             size = 4)+
+#  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = seasonal_effort_per_ves$grp, label= seasonal_effort_per_ves$grp))+
   #  geom_text(label = grid.s$Row.names)+
   theme(legend.title = element_text(size = 14, face = "bold"), 
         legend.text = element_text(size = 12, face = "bold"), 
@@ -1041,11 +1057,19 @@ ggplot(MDS_xy, aes(MDS1, MDS2 , shape = seasonal_effort_per_ves$target_code, col
         panel.background = element_blank(), 
         panel.border = element_rect(fill = NA, colour = "black"), 
         legend.key=element_blank()) + 
-  labs(x = "MDS 1", y = "MDS 2", colour = "Month", shape = "target species") +
-  scale_colour_brewer(palette = "Paired", aesthetics = "colour")
+  labs(x = "MDS 1", y = "MDS 2", fill = "Season", shape = "species group") +
+  scale_fill_brewer(palette = "Paired", aesthetics = "fill")+
+  scale_shape_manual(values = c(24, 22, 23,21,  25)) +
+  guides(fill = guide_legend("Season", override.aes = list(shape = 21)))
+
+ggsave("outputs/vessel_area_month.png", width = 40, height = 30, units = "cm")
+
+# shape = seasonal_effort_per_ves$target_code,
+```
 
 
 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 ##do permanova
 permanova <- adonis2(dm~ vessel_number+docking_date_mm, data = seasonal_effort_per_ves[1:2], by =   "terms")
 permanova%>% 
@@ -1081,7 +1105,7 @@ test <- landing%>%
 
 #random sample
 test.1 <- test %>%
-  slice_sample(prop = 0.05)
+  slice_sample(prop = 0.01)
 
 #distance matrix
 
@@ -1090,9 +1114,8 @@ dm <- vegdist(test.1[7:19], method="bray", na.rm = T)
 
 #Do a PERMANOVA
 
-permanova <- adonis2(dm~ docking_date_yy*docking_date_mm*vessel_number, data = test.1[1:6])
-summary(permanova)
-%>% 
+permanova <- adonis2(dm~ docking_date_yy+docking_date_mm+vessel_number, data = test.1[1:6], by = "terms")
+permanova%>% 
   rownames_to_column(var = "ExplanatoryVariables") %>% 
   gt()
 
@@ -1159,9 +1182,9 @@ area <- drag %>%
 ## PERMANOVA
 
 test <- area%>%
-  select(-scientific_name) %>% 
   filter(nominal_mass != 0)%>%
   right_join(topspp)%>%
+  select(-scientific_name) %>% 
   normalise(nominal_mass, drag_id, "drag_id")%>%
   mutate(norm = sqrt(norm))%>%
   select(-c(nominal_mass))%>%
@@ -1176,16 +1199,16 @@ test <- area%>%
 
 #random sample
 test.1 <- test %>%
-  slice_sample(prop = 0.05)
+  slice_sample(prop = 0.01)
 
 spp <- test.1 %>%
   select(-c(land_id, drag_id,  docking_date_yy, docking_date_mm,
-            vessel_number, grid_code, depth, target_species_code, 
+            vessel_number, grid_code, target_species_code, 
             trawl_length_hh))
 
 env <- test.1 %>%
   select(c(land_id, drag_id,  docking_date_yy, docking_date_mm,
-            vessel_number, grid_code, depth, target_species_code, 
+            vessel_number, grid_code, target_species_code, 
             trawl_length_hh))
 
 
@@ -1199,7 +1222,7 @@ dm <- vegdist(test.1[10:22], method="bray", na.rm = T)
 
 #Do a PERMANOVA
 
-permanova2 <- adonis2(dm~ docking_date_yy*docking_date_mm*grid_code*vessel_number, data = test.1[3:6])
+permanova2 <- adonis2(dm~ docking_date_yy+docking_date_mm+grid_code+vessel_number, data = test.1[3:6], by = "terms")
 permanova2%>% 
   rownames_to_column(var = "ExplanatoryVariables") %>% 
   gt()
@@ -1242,5 +1265,21 @@ plot(grid, hull=FALSE, ellipse=TRUE)
 
 ```
 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# 
+# test <- dit_landings %>% 
+#   filter(docking_date_yy == 2019) %>% 
+#   distinct(vessel_number)
+# 
+# test <- landings.1  %>% 
+#   summarise(mean = mean(trip_length_dd))
+# 
+# test <- landings.1  %>% 
+#   summarise(mean = mean(number_of_drags))
+# 
+
+
+```
 
 

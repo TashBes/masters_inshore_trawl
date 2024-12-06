@@ -194,7 +194,9 @@ target_code <- drag %>%
                                "Hake",
                                if_else(norm>0.75 & 
                                          target_species_code == "ECSOLE", 
-                                       "Sole", "both")))
+                                       "Sole", "both"))) %>% 
+  rownames_to_column() %>% 
+  mutate(rowname = as.integer(rowname))
 
 
 
@@ -203,7 +205,7 @@ target_code <- drag %>%
 ####
 
 #sum the catch by vessel, and normalise and square root the catch comp per vessel
-test <- landing%>%
+ves.s <- landing%>%
   right_join(topspp)%>%
   group_by(vessel_number,species_code)%>%
   summarise(nominal_mass = sum(nominal_mass, na.rm = T))%>%
@@ -214,12 +216,12 @@ test <- landing%>%
   pivot_wider(names_from = species_code, values_from = norm)%>%
   mutate_all(~replace_na(.,0))%>%
   ungroup()%>% 
-  column_to_rownames(var = "vessel_number")
+  column_to_rownames(var = "vessel_number") 
 
-write.csv(test, "simp.ves.csv", row.names = F)
+write.csv(ves.s, "simp.ves.csv", row.names = F)
 
 #distance matrix
-dm <- vegdist(test, method="bray", na.rm = T)
+dm <- vegdist(ves.s, method="bray", na.rm = T)
 
 #cluster
 cluster<- dm %>%
@@ -231,9 +233,25 @@ x <- cluster%>%
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
   colour_branches(h = 0.13, groupLabels = T,
-                  col = "black")
+                  col = "black") 
 
-plot(x)
+
+rowname <- order.dendrogram(x)
+  
+levels <- as.data.frame(rowname)
+
+test <- levels %>% 
+  right_join(target_code) %>% 
+  mutate(shape = if_else(target_code == "Hake", 17, 
+                         if_else(target_code == "Sole", 15,19)))
+
+
+x1 <- x %>%
+  set("leaves_pch",test$shape ) %>%  # node point type
+  set("leaves_cex", 1.5) 
+  
+
+plot(x1)
 title(ylab = 'Dissimilarity', line = 2.5)
 title(xlab = 'Vessels', line = 2)
 
@@ -251,46 +269,46 @@ grp<- labels %>%
   pivot_longer(cols= 1:5,names_to = "grp", values_drop_na = T )%>%
   column_to_rownames(var = "value")
 
-ves.s <- test %>% 
-  merge(grp, by = "row.names")%>% 
-  mutate(Row.names = as.numeric(Row.names)) %>% 
+ves.s <- ves.s %>%
+  merge(grp, by = "row.names")%>%
+  mutate(Row.names = as.numeric(Row.names)) %>%
   left_join(select(target_code, vessel_number, target_code), by = c("Row.names" = "vessel_number"))
-
-
-#write.csv(ves.s, "simp.ves.csv", , row.names = F)
-
-#### MDS
-
-#distance matrix
-
-dm <- vegdist(ves.s[2:14], method="bray", na.rm = T)
-
-#Do MDS
-mds <- metaMDS(dm, 
-               k=3,
-               try=15, trymax=20,
-               autotransform = FALSE,#if it doesn't converge increase k by 1. 
-               trace = F)
-
-
-MDS_xy <- data.frame(mds$points, mds$stress)
-
-
-ggplot(MDS_xy, aes(MDS1, MDS2, shape = ves.s$target_code)) +
-  geom_point(size = 5) + 
-  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = ves.s$grp, label = ves.s$grp))+
-  theme(legend.title = element_text(size = 14, face = "bold"), 
-        legend.text = element_text(size = 12, face = "bold"), 
-        legend.position = "right", 
-        axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
-        axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
-        axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
-        axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
-        panel.background = element_blank(), 
-        panel.border = element_rect(fill = NA, colour = "black"), 
-        legend.key=element_blank()) + 
-  labs(x = "MDS 1", y = "MDS 2", colour = "Cluster", shape = "Target Species") +
-  scale_colour_brewer(palette = "Paired", aesthetics = "colour")
+# 
+# 
+# #write.csv(ves.s, "simp.ves.csv", , row.names = F)
+# 
+# #### MDS
+# 
+# #distance matrix
+# 
+# dm <- vegdist(ves.s[2:14], method="bray", na.rm = T)
+# 
+# #Do MDS
+# mds <- metaMDS(dm, 
+#                k=3,
+#                try=15, trymax=20,
+#                autotransform = FALSE,#if it doesn't converge increase k by 1. 
+#                trace = F)
+# 
+# 
+# MDS_xy <- data.frame(mds$points, mds$stress)
+# 
+# 
+# ggplot(MDS_xy, aes(MDS1, MDS2, shape = ves.s$target_code)) +
+#   geom_point(size = 5) + 
+#   ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = ves.s$grp, label = ves.s$grp))+
+#   theme(legend.title = element_text(size = 14, face = "bold"), 
+#         legend.text = element_text(size = 12, face = "bold"), 
+#         legend.position = "right", 
+#         axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
+#         axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
+#         axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
+#         axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
+#         panel.background = element_blank(), 
+#         panel.border = element_rect(fill = NA, colour = "black"), 
+#         legend.key=element_blank()) + 
+#   labs(x = "MDS 1", y = "MDS 2", colour = "Cluster", shape = "Target Species") +
+#   scale_colour_brewer(palette = "Paired", aesthetics = "colour")
 
 
 ```
@@ -624,7 +642,7 @@ x <- cluster%>%
   dendextend::set("labels_cex", 0.8)%>%
   dendextend::set("branches_lwd", 2)%>%
   colour_branches(h = 0.06, groupLabels = lbls,
-                  col = brewer.pal(3,"Paired"))
+                  col = "black")
 
 tdro3 <- reorder(x, c(1, 4, 8, 5, 9, 7, 2, 6, 3, 10, 11, 12), mean)
 plot(tdro3)
@@ -632,56 +650,56 @@ title(ylab = 'Dissimilarity', line = 2.5)
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-dend_list <- get_subdendrograms(x, 3)
-labels <- lapply(dend_list, labels)
-grp<- labels %>%
-  plyr::ldply( rbind)%>%
-  t()%>%
-  as_tibble()%>%
-  rename(S1 = V1,
-         S3 = V2,
-         S2 = V3)%>%
-  pivot_longer(cols= 1:3,names_to = "grp", values_drop_na = T )%>%
-  column_to_rownames(var = "value")
-
-sea.s <- test %>% 
-  merge(grp, by = "row.names") %>% 
-  left_join(select(month, month, season), by = c("Row.names" = "month")) %>% 
-  distinct()
-#write.csv(sea.s, "simp.season.csv", row.names = F)
-
-#### MDS
-
-#distance matrix
-
-dm <- vegdist(sea.s[2:14], method="bray", na.rm = T)
-
-#Do MDS
-mds <- metaMDS(dm, 
-               k=3,
-               try=15, trymax=20,
-               autotransform = FALSE,#if it doesn't converge increase k by 1. 
-               trace = F)         
-
-
-MDS_xy <- data.frame(mds$points)
-
-
-ggplot(MDS_xy, aes(MDS1, MDS2,  shape = sea.s$season)) + #colour = sea.s$grp,
-  geom_point(size = 6) + 
-  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = sea.s$grp, label = sea.s$grp))+
-  theme(legend.title = element_text(size = 14, face = "bold"), 
-        legend.text = element_text(size = 12, face = "bold"), 
-        legend.position = "right", 
-        axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
-        axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
-        axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
-        axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
-        panel.background = element_blank(), 
-        panel.border = element_rect(fill = NA, colour = "black"), 
-        legend.key=element_blank()) + 
-  labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "season") +
-  scale_fill_brewer(palette = "Paired", aesthetics = "colour")
+# dend_list <- get_subdendrograms(x, 3)
+# labels <- lapply(dend_list, labels)
+# grp<- labels %>%
+#   plyr::ldply( rbind)%>%
+#   t()%>%
+#   as_tibble()%>%
+#   rename(S1 = V1,
+#          S3 = V2,
+#          S2 = V3)%>%
+#   pivot_longer(cols= 1:3,names_to = "grp", values_drop_na = T )%>%
+#   column_to_rownames(var = "value")
+# 
+# sea.s <- test %>% 
+#   merge(grp, by = "row.names") %>% 
+#   left_join(select(month, month, season), by = c("Row.names" = "month")) %>% 
+#   distinct()
+# #write.csv(sea.s, "simp.season.csv", row.names = F)
+# 
+# #### MDS
+# 
+# #distance matrix
+# 
+# dm <- vegdist(sea.s[2:14], method="bray", na.rm = T)
+# 
+# #Do MDS
+# mds <- metaMDS(dm, 
+#                k=3,
+#                try=15, trymax=20,
+#                autotransform = FALSE,#if it doesn't converge increase k by 1. 
+#                trace = F)         
+# 
+# 
+# MDS_xy <- data.frame(mds$points)
+# 
+# 
+# ggplot(MDS_xy, aes(MDS1, MDS2,  shape = sea.s$season)) + #colour = sea.s$grp,
+#   geom_point(size = 6) + 
+#   ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = sea.s$grp, label = sea.s$grp))+
+#   theme(legend.title = element_text(size = 14, face = "bold"), 
+#         legend.text = element_text(size = 12, face = "bold"), 
+#         legend.position = "right", 
+#         axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
+#         axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
+#         axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
+#         axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
+#         panel.background = element_blank(), 
+#         panel.border = element_rect(fill = NA, colour = "black"), 
+#         legend.key=element_blank()) + 
+#   labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "season") +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "colour")
 
 ```
 
@@ -842,71 +860,71 @@ title(xlab = 'Grid cells', line = 2)
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 
-dend_list <- get_subdendrograms(x,10)
-labels <- lapply(dend_list, labels)
-grp<- labels %>%
-  plyr::ldply( rbind)%>%
-  t()%>%
-  as_tibble()%>%
-  rename(G1 = V1,
-         G2 = V2,
-         G3 = V3,
-         G4 = V4,
-         G5 = V5,
-         G6 = V6,
-         G7 = V7,
-         G8 = V8,
-         G9 = V9,
-         G10 = V10)%>%
-  pivot_longer(cols= 1:10,names_to = "grp", values_drop_na = T )%>%
-  column_to_rownames(var = "value")
-
-
-
-grid.s <- grid %>%
-  merge( grp, by="row.names") %>%
-  mutate(grp = if_else(grp == "G2", "G3", grp))%>%
-  mutate(grp = if_else(grp == "G4", "G5", grp))%>%
-  mutate(grp = if_else(grp == "G7", "G8", grp))
-
-#write.csv(grid.s, "simp.area.csv", row.names = F)
-#### MDS
-
-#distance matrix
-
-
-dm <- vegdist(grid.s[2:14], method="bray", na.rm = T)
-
-#Do MDS
-mds <- metaMDS(dm, 
-               k=3,
-               try=15, trymax=20,
-               autotransform = FALSE,
-               trace = F)         #if it doesn't converge increase k by 1. 
-
-
-MDS_xy <- data.frame(mds$points)
-
-
-ggplot(MDS_xy, aes(MDS1, MDS2 )) +   #, shape =grid.s$grp
-  geom_point(size = 6)+
-  ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = grid.s$grp))+
-  #  geom_text(label = grid.s$Row.names)+
-  theme(legend.title = element_text(size = 14, face = "bold"), 
-        legend.text = element_text(size = 12, face = "bold"), 
-        legend.position = "right", 
-        axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
-        axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
-        axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
-        axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
-        panel.background = element_blank(), 
-        panel.border = element_rect(fill = NA, colour = "black"), 
-        legend.key=element_blank()) + 
-  labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "group") +
-  scale_fill_brewer(palette = "Paired", aesthetics = "colour", 
-                    breaks=c('G1', 'G2','G3','G4','G5',
-                             'G6', 'G7', 'G8', 'G9', 'G10'))
-
+# dend_list <- get_subdendrograms(x,10)
+# labels <- lapply(dend_list, labels)
+# grp<- labels %>%
+#   plyr::ldply( rbind)%>%
+#   t()%>%
+#   as_tibble()%>%
+#   rename(G1 = V1,
+#          G2 = V2,
+#          G3 = V3,
+#          G4 = V4,
+#          G5 = V5,
+#          G6 = V6,
+#          G7 = V7,
+#          G8 = V8,
+#          G9 = V9,
+#          G10 = V10)%>%
+#   pivot_longer(cols= 1:10,names_to = "grp", values_drop_na = T )%>%
+#   column_to_rownames(var = "value")
+# 
+# 
+# 
+# grid.s <- grid %>%
+#   merge( grp, by="row.names") %>%
+#   mutate(grp = if_else(grp == "G2", "G3", grp))%>%
+#   mutate(grp = if_else(grp == "G4", "G5", grp))%>%
+#   mutate(grp = if_else(grp == "G7", "G8", grp))
+# 
+# #write.csv(grid.s, "simp.area.csv", row.names = F)
+# #### MDS
+# 
+# #distance matrix
+# 
+# 
+# dm <- vegdist(grid.s[2:14], method="bray", na.rm = T)
+# 
+# #Do MDS
+# mds <- metaMDS(dm, 
+#                k=3,
+#                try=15, trymax=20,
+#                autotransform = FALSE,
+#                trace = F)         #if it doesn't converge increase k by 1. 
+# 
+# 
+# MDS_xy <- data.frame(mds$points)
+# 
+# 
+# ggplot(MDS_xy, aes(MDS1, MDS2 )) +   #, shape =grid.s$grp
+#   geom_point(size = 6)+
+#   ggforce::geom_mark_ellipse(aes(MDS1, MDS2, group = grid.s$grp))+
+#   #  geom_text(label = grid.s$Row.names)+
+#   theme(legend.title = element_text(size = 14, face = "bold"), 
+#         legend.text = element_text(size = 12, face = "bold"), 
+#         legend.position = "right", 
+#         axis.text.x = element_text(face = "bold",colour = "black", size = 12), 
+#         axis.text.y = element_text(face = "bold", size = 12, colour = "black"), 
+#         axis.title.y = element_text(face = "bold", size = 14, colour = "black"),
+#         axis.title.x = element_text(face = "bold", size = 14, colour = "black"),
+#         panel.background = element_blank(), 
+#         panel.border = element_rect(fill = NA, colour = "black"), 
+#         legend.key=element_blank()) + 
+#   labs(x = "MDS 1", y = "MDS 2", colour = "group", shape = "group") +
+#   scale_fill_brewer(palette = "Paired", aesthetics = "colour", 
+#                     breaks=c('G1', 'G2','G3','G4','G5',
+#                              'G6', 'G7', 'G8', 'G9', 'G10'))
+# 
 
 ```
 
@@ -1059,7 +1077,7 @@ ggplot(MDS_xy, aes(MDS1, MDS2)) +
         legend.key=element_blank()) + 
   labs(x = "MDS 1", y = "MDS 2", fill = "Season", shape = "species group") +
   scale_fill_brewer(palette = "Paired", aesthetics = "fill")+
-  scale_shape_manual(values = c(24, 22, 23,21,  25)) +
+  scale_shape_manual(values = c( 25,22,  24, 21, 23)) +
   guides(fill = guide_legend("Season", override.aes = list(shape = 21)))
 
 ggsave("outputs/vessel_area_month.png", width = 40, height = 30, units = "cm")
